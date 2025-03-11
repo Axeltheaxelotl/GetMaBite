@@ -1,2 +1,2 @@
 # GetMaBite
-Le serveur qui envoie tout sans consentement comme le cul a simon
+La logique est plus croise que l'arbre genealogique de sam
