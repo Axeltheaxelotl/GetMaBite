@@ -1,0 +1,29 @@
+===================
+RFC 2616 (HTTP/1.1)
+===================
+
+   . Qu'est-ce que le RFC 2616 :
+	- Le document qui definit le protocole HTTP/1.1, utilise pour les comunications web.
+	
+	- HTTP/1.1 est la version la plus courante du protocole HTTP, qui est responsable des
+	echanges de donnees entre les client (navigateur) et les serveurs web.
+	
+	
+   . Les points essentiels a retenir :
+	1. Methodes HTTP: comprendre comment fonctionnent les princepales methodes HTTP comme
+	GET, POST, PUT, DELETE, HEAD, OPTIONS.
+	
+	2. Codes de status HTTP: les codes de reponse du serveur (ex: 200 OK, 404 Not Found, 500
+	Internal Server Error).
+	
+	3. En-tetes HTTP: apprendre a gerer les en-tetes qui accompagnent les requetes et reponses
+	(ex: Content-Type, Content-Length, Host).
+	
+	4. Structure des requetes et reponses HTTP: comment les requetes sont envoyees par le client
+	et comment le serveur repond.
+	
+	5. Gestion des connexions HTTP: la difference entre keep-alive et close, ainsu que la gestion
+	des connexions persistantes.
+	
+
+  . 
