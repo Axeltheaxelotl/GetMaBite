@@ -9,6 +9,10 @@
 
 ---
 
+Voici ton fichier **README.md** complet avec les sections que tu as demandées, incluant les espaces pour les images :
+
+```
+markdown
 ### **RFC 2616 (HTTP/1.1)**  
 ====================
 
@@ -57,10 +61,15 @@ Tout ça te permet de construire un serveur qui interagit correctement avec les 
    GET /index.html HTTP/1.1
    Host: localhost
    ```
-   Cela te permet de voir la réponse du serveur, notamment les en-têtes et le corps du message.
+
+   ![Telnet Command Example](https://example.com/telnet_command_image.png)  
+   _Exemple d'une requête GET via Telnet_
 
 3. **Explorer les réponses HTTP :**  
    Regarde bien la structure des réponses que le serveur renvoie, les en-têtes qu’il utilise et comment il renvoie les données.
+
+   ![Telnet Response Example](https://example.com/telnet_response_image.png)  
+   _Exemple de réponse HTTP via Telnet_
 
 4. **Tester d’autres méthodes HTTP :**  
    Tu peux aussi tester d’autres méthodes comme **POST** ou **PUT** pour voir comment le serveur réagit selon les types de requêtes.
@@ -102,8 +111,14 @@ Les tests avec Telnet te permettent de mieux comprendre la structure des requêt
    sudo tail -f /var/log/nginx/access.log
    ```
 
+   ![NGINX Logs](https://example.com/nginx_logs_image.png)  
+   _Exemple de logs NGINX_
+
 5. **Simuler des erreurs :**  
    Tu peux aussi tester des erreurs en accédant à une page qui n’existe pas, par exemple **http://localhost/404page**, et observer comment le serveur réagit.
+
+   ![404 Error Example](https://example.com/404_error_image.png)  
+   _Exemple d'une erreur 404 sur NGINX_
 
 #### **Pourquoi c'est important ?**
 Utiliser NGINX t’aide à comparer ton serveur avec un serveur éprouvé et performant. Cela te permet aussi de comprendre comment un serveur bien configuré gère les requêtes et les erreurs.
@@ -138,5 +153,10 @@ Avant de démarrer ton projet **webserv**, il est vraiment important de :
 Ces étapes te donneront une bonne base pour ton projet, en t'aidant à comprendre en profondeur le fonctionnement du protocole HTTP et à comparer ton serveur avec un serveur déjà performant comme **NGINX**.
 
 ---
+```
 
-Voilà, j'espère que ce format est plus naturel pour toi ! Si tu as besoin de précisions ou d'ajouts, n’hésite pas à me le dire.
+### Explications supplémentaires :
+- Les liens vers les images doivent être remplacés par des URL valides. Par exemple, si tu télécharges tes images sur GitHub, l'URL de l'image pourrait être quelque chose comme `https://github.com/ton-utilisateur/ton-repository/raw/main/assets/telnet_command_image.png`.
+- Tu peux aussi héberger les images sur un autre service comme **Imgur**, puis utiliser ces URLs dans le Markdown.
+
+Si tu as besoin d’aide pour héberger tes images ou pour autre chose, n’hésite pas à demander !
