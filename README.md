@@ -7,8 +7,6 @@
   <img src="https://github.com/Axeltheaxelotl/boite-a-foutre/blob/main/67d0591149b44087559381.gif?raw=true" alt="Image 2" width="45%" height="300px" style="border-radius: 10px;"/>
 </p>
 
-Bien sûr ! Voici la réécriture du texte de manière plus naturelle, comme si tu t'expliquais à toi-même :
-
 ---
 
 ### **RFC 2616 (HTTP/1.1)**  
