@@ -8,11 +8,6 @@
 </p>
 
 ---
-
-Voici ton fichier **README.md** complet avec les sections que tu as demandées, incluant les espaces pour les images :
-
-```
-markdown
 ### **RFC 2616 (HTTP/1.1)**  
 ====================
 
@@ -51,28 +46,19 @@ Tout ça te permet de construire un serveur qui interagit correctement avec les 
 
 1. **Se connecter au serveur :**  
    Pour se connecter à un serveur HTTP, tu peux utiliser cette commande :
-   ```
-   telnet localhost 80
-   ```
+      GET /index.html HTTP/1.1 Host: localhost
 
-2. **Envoyer une requête HTTP manuelle :**  
-   Une fois connecté, tu peux envoyer une requête **GET** pour récupérer une page HTML. Par exemple :
-   ```
-   GET /index.html HTTP/1.1
-   Host: localhost
-   ```
-
-   ![Telnet Command Example](https://example.com/telnet_command_image.png)  
-   _Exemple d'une requête GET via Telnet_
+![Telnet Command Example](https://example.com/telnet_command_image.png)  
+_Exemple d'une requête GET via Telnet_
 
 3. **Explorer les réponses HTTP :**  
-   Regarde bien la structure des réponses que le serveur renvoie, les en-têtes qu’il utilise et comment il renvoie les données.
+Regarde bien la structure des réponses que le serveur renvoie, les en-têtes qu’il utilise et comment il renvoie les données.
 
-   ![Telnet Response Example](https://example.com/telnet_response_image.png)  
-   _Exemple de réponse HTTP via Telnet_
+![Telnet Response Example](https://example.com/telnet_response_image.png)  
+_Exemple de réponse HTTP via Telnet_
 
 4. **Tester d’autres méthodes HTTP :**  
-   Tu peux aussi tester d’autres méthodes comme **POST** ou **PUT** pour voir comment le serveur réagit selon les types de requêtes.
+Tu peux aussi tester d’autres méthodes comme **POST** ou **PUT** pour voir comment le serveur réagit selon les types de requêtes.
 
 #### **Pourquoi c'est utile ?**
 Les tests avec Telnet te permettent de mieux comprendre la structure des requêtes et des réponses HTTP. Ça te prépare à gérer les protocoles HTTP dans ton propre serveur.
@@ -88,37 +74,31 @@ Les tests avec Telnet te permettent de mieux comprendre la structure des requêt
 #### **Comment utiliser NGINX :**
 
 1. **Installer NGINX :**  
-   Si tu es sur **Linux (Debian/Ubuntu)**, tu peux installer NGINX avec la commande suivante :
-   ```
+Si tu es sur **Linux (Debian/Ubuntu)**, tu peux installer NGINX avec la commande suivante :
    sudo apt install nginx
-   ```
 
 2. **Démarrer NGINX :**  
-   Pour démarrer le serveur, utilise cette commande :
-   ```
+Pour démarrer le serveur, utilise cette commande :
    sudo systemctl start nginx
-   ```
 
 3. **Tester NGINX :**  
-   Vérifie qu'il fonctionne bien en allant sur **http://localhost** dans ton navigateur ou en utilisant **curl** :
-   ```
+Vérifie qu'il fonctionne bien en allant sur **http://localhost** dans ton navigateur ou en utilisant **curl** :
    curl http://localhost
-   ```
+
 
 4. **Analyser les logs :**  
-   Les logs d’NGINX te permettent de voir comment il gère les requêtes. Pour les afficher en temps réel, tu peux utiliser :
-   ```
+Les logs d’NGINX te permettent de voir comment il gère les requêtes. Pour les afficher en temps réel, tu peux utiliser :
    sudo tail -f /var/log/nginx/access.log
-   ```
 
-   ![NGINX Logs](https://example.com/nginx_logs_image.png)  
-   _Exemple de logs NGINX_
+
+![NGINX Logs](https://example.com/nginx_logs_image.png)  
+_Exemple de logs NGINX_
 
 5. **Simuler des erreurs :**  
-   Tu peux aussi tester des erreurs en accédant à une page qui n’existe pas, par exemple **http://localhost/404page**, et observer comment le serveur réagit.
+Tu peux aussi tester des erreurs en accédant à une page qui n’existe pas, par exemple **http://localhost/404page**, et observer comment le serveur réagit.
 
-   ![404 Error Example](https://example.com/404_error_image.png)  
-   _Exemple d'une erreur 404 sur NGINX_
+![404 Error Example](https://example.com/404_error_image.png)  
+_Exemple d'une erreur 404 sur NGINX_
 
 #### **Pourquoi c'est important ?**
 Utiliser NGINX t’aide à comparer ton serveur avec un serveur éprouvé et performant. Cela te permet aussi de comprendre comment un serveur bien configuré gère les requêtes et les erreurs.
@@ -129,16 +109,16 @@ Utiliser NGINX t’aide à comparer ton serveur avec un serveur éprouvé et per
 ==================================
 
 1. **Gestion des erreurs HTTP :**
-   Tu dois comprendre comment gérer les **codes d’erreur HTTP** comme **404 Not Found** ou **500 Internal Server Error**, et savoir comment générer des pages d'erreur personnalisées.
+Tu dois comprendre comment gérer les **codes d’erreur HTTP** comme **404 Not Found** ou **500 Internal Server Error**, et savoir comment générer des pages d'erreur personnalisées.
 
 2. **Header Parsing :**
-   Il est essentiel de savoir **parser les en-têtes HTTP** pour extraire des informations importantes comme le type de contenu (**Content-Type**) et la longueur du message (**Content-Length**).
+Il est essentiel de savoir **parser les en-têtes HTTP** pour extraire des informations importantes comme le type de contenu (**Content-Type**) et la longueur du message (**Content-Length**).
 
 3. **Sécurisation du serveur :**
-   La sécurité du serveur est primordiale. Il faut comprendre comment gérer des en-têtes de sécurité comme **Content-Security-Policy** ou **X-Frame-Options**.
+La sécurité du serveur est primordiale. Il faut comprendre comment gérer des en-têtes de sécurité comme **Content-Security-Policy** ou **X-Frame-Options**.
 
 4. **Réseau et Ports :**
-   Enfin, tu dois maîtriser le fonctionnement des **ports réseau** (par exemple, le port 80 pour HTTP) et comprendre comment ton serveur interagit avec le réseau.
+Enfin, tu dois maîtriser le fonctionnement des **ports réseau** (par exemple, le port 80 pour HTTP) et comprendre comment ton serveur interagit avec le réseau.
 
 ---
 
@@ -153,10 +133,6 @@ Avant de démarrer ton projet **webserv**, il est vraiment important de :
 Ces étapes te donneront une bonne base pour ton projet, en t'aidant à comprendre en profondeur le fonctionnement du protocole HTTP et à comparer ton serveur avec un serveur déjà performant comme **NGINX**.
 
 ---
-```
 
-### Explications supplémentaires :
-- Les liens vers les images doivent être remplacés par des URL valides. Par exemple, si tu télécharges tes images sur GitHub, l'URL de l'image pourrait être quelque chose comme `https://github.com/ton-utilisateur/ton-repository/raw/main/assets/telnet_command_image.png`.
-- Tu peux aussi héberger les images sur un autre service comme **Imgur**, puis utiliser ces URLs dans le Markdown.
 
-Si tu as besoin d’aide pour héberger tes images ou pour autre chose, n’hésite pas à demander !
+
