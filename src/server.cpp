@@ -4,15 +4,16 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <fstream>
 
 Server::Server(int port) : port(port)
 {
-    initServer(); // Initialiser le serveur
+    initServer();
 }
 
 void Server::initServer()
 {
-    // Créer un socket
+    // Création du socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1)
     {
@@ -50,22 +51,59 @@ void Server::handleRequest(int client_fd)
         return;
     }
 
-    // Afficher la requête pour déboguer
     std::cout << "Requête reçue:\n" << buffer << std::endl;
 
-    // Vérifier que la requête est bien une requête GET
+    // Vérifier la méthode HTTP
     std::string request(buffer);
     if (request.find("GET") != std::string::npos)
     {
-        // Créer une réponse HTTP basique
-        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!";
-        sendResponse(client_fd, response); // Envoyer la réponse
+        handleGET(client_fd);
+    }
+    else if (request.find("POST") != std::string::npos)
+    {
+        handlePOST(client_fd);
+    }
+    else if (request.find("DELETE") != std::string::npos)
+    {
+        handleDELETE(client_fd);
     }
     else
     {
         std::string response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
-        sendResponse(client_fd, response); // Répondre que la méthode n'est pas autorisée
+        sendResponse(client_fd, response);
     }
+}
+
+void Server::handleGET(int client_fd)
+{
+    std::string filepath = "./index.html";  // Exemple de fichier à renvoyer
+    std::ifstream file(filepath);
+
+    if (file)
+    {
+        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + content;
+        sendResponse(client_fd, response);
+    }
+    else
+    {
+        std::string response = "HTTP/1.1 404 Not Found\r\n\r\nFile not found.";
+        sendResponse(client_fd, response);
+    }
+}
+
+void Server::handlePOST(int client_fd)
+{
+    // Gestion des requêtes POST (ex. téléchargement de fichier)
+    std::string response = "HTTP/1.1 200 OK\r\n\r\nPOST request received.";
+    sendResponse(client_fd, response);
+}
+
+void Server::handleDELETE(int client_fd)
+{
+    // Suppression d'un fichier (ex. si le client demande la suppression d'un fichier)
+    std::string response = "HTTP/1.1 200 OK\r\n\r\nDELETE request received.";
+    sendResponse(client_fd, response);
 }
 
 void Server::sendResponse(int client_fd, const std::string &response)
@@ -80,7 +118,6 @@ void Server::start()
     int addrlen = sizeof(address);
     while (true)
     {
-        // Attendre et accepter une connexion d'un client
         int client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen);
         if (client_fd < 0)
         {

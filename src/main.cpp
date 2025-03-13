@@ -2,8 +2,8 @@
 
 int main()
 {
-    int port = 8080; // Choisir un port pour le serveur
-    Server server(port); // Créer une instance de la classe Server
-    server.start(); // Démarrer le serveur
+    int port = 8080;
+    Server server(port);
+    server.start();
     return 0;
 }

@@ -1,0 +1,25 @@
+# Configuration de base pour le serveur Web
+
+# Le port sur lequel le serveur écoute les requêtes
+port=8080
+
+# Limite de taille pour les fichiers téléchargés via POST (en octets)
+max_post_size=1048576  # 1 MB
+
+# Dossier contenant les fichiers statiques à servir (par exemple HTML, images)
+static_dir=./www
+
+# URL pour les fichiers CGI (si vous avez des scripts CGI à exécuter)
+cgi_dir=./cgi-bin
+
+# Méthodes HTTP autorisées
+allowed_methods=GET,POST,DELETE
+
+# Activé ou non la gestion des erreurs (par exemple, erreur 404 pour fichier non trouvé)
+enable_error_handling=true
+
+# Chemin du fichier de log pour stocker les logs d'activité du serveur
+log_file=./logs/server.log
+
+# Activer ou désactiver la gestion des fichiers logs
+enable_logging=true
