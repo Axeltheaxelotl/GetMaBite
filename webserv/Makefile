@@ -1,0 +1,72 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
+#    Updated: 2025/03/11 07:26:47 by smasse           ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: smasse <smasse@student.42luxembourg.lu>      +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2024/05/24 15:20:44 by smasse            #+#    #+#              #
+#    Updated: 2025/02/05 15:22:50 by smasse           ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+NAME      = webserv
+CXX       = clang++ 
+STD       = -std=c++98
+CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
+INCLUDES  = -I./include
+DEBUG_FLAGS = -O0 -g3 -flto $(STD)
+OBJ_DIR   = ./objs
+
+SRCS      = ./srcs/main.cpp ./srcs/parser/parser.cpp
+
+OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
+
+ERASE	:=	\033[2K\r
+BLUE    :=  \033[34m
+YELLOW  :=  \033[33m
+GREEN   :=  \033[32m
+END     :=  \033[0m
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+	@printf "$(BLUE)> Compiling $(NAME)... <$(END)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(OBJS) -o $(NAME)
+	@printf "$(ERASE)$(BLUE)> $(NAME) created <$(END)\n"
+
+$(OBJ_DIR)/%.o: src/%.cpp
+	@mkdir -p $(dir $@)
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	@printf "$(ERASE)$(BLUE)> Compiling: $< <$(END)"
+
+debug: CXXFLAGS = $(DEBUG_FLAGS)
+debug:
+	@printf "$(BLUE)> Debug mode <$(END)\n"
+	@$(MAKE) all
+
+clean:
+	@printf "$(BLUE)> Removing object files... <$(END)"
+	@rm -rf $(OBJ_DIR)
+	@printf "$(ERASE)$(BLUE)> Object files removed <$(END)\n"
+
+fclean: clean
+	@printf "$(BLUE)> Removing executable $(NAME)... <$(END)"
+	@rm -f $(NAME)
+	@printf "$(ERASE)$(BLUE)> $(NAME) removed <$(END)\n"
+
+re: fclean all
+
+.PHONY: all clean fclean re debug
