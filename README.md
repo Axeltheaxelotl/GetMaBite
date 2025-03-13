@@ -134,5 +134,41 @@ Ces étapes te donneront une bonne base pour ton projet, en t'aidant à comprend
 
 ---
 
+## Priorités
 
 
+| Priorité  | Tâche                                  | Description |
+|-----------|----------------------------------------|-------------|
+| 1         | **Gestion des requêtes HTTP**          | Implémenter la réception et le traitement des requêtes HTTP (`GET`, `POST`, `DELETE`). |
+| 2         | **Serveur non-bloquant avec `poll()`**  | Assurer que le serveur peut gérer des connexions simultanées sans se bloquer. |
+| 3         | **Fichier de configuration**           | Permettre la configuration des serveurs, routes, et méthodes HTTP. |
+| 4         | **Gestion des réponses HTTP**          | Générer des réponses HTTP correctes, y compris les pages d'erreur par défaut. |
+| 5         | **Exécution de CGI**                   | Implémenter l'exécution de scripts CGI (ex : PHP, Python). |
+| 6         | **Téléversement de fichiers**          | Ajouter la fonctionnalité pour accepter et gérer les uploads de fichiers. |
+| 7         | **Test de résistance**                 | Vérifier que le serveur fonctionne sous haute charge sans se planter. |
+
+---
+
+
+```plaintext
+webserv/
+│
+├── src/
+│   ├── main.cpp              # Point d'entrée du serveur
+│   ├── server.cpp            # Logique du serveur HTTP
+│   ├── request.cpp           # Gestion des requêtes HTTP
+│   ├── response.cpp          # Gestion des réponses HTTP
+│   ├── config.cpp            # Gestion du fichier de configuration
+│   ├── utils.cpp             # Fonctions utilitaires (ex: gestion des erreurs)
+│   └── cgi.cpp               # Gestion des scripts CGI
+│
+├── include/
+│   ├── server.hpp            # Déclaration de la classe Server
+│   ├── request.hpp           # Déclaration de la classe Request
+│   ├── response.hpp          # Déclaration de la classe Response
+│   ├── config.hpp            # Déclaration de la classe Config
+│   └── utils.hpp             # Déclarations utilitaires
+│
+├── Makefile                  # Fichier pour la compilation
+├── config_example.txt        # Exemple de fichier de configuration
+└── README.md                 # Fichier de documentation
