@@ -31,29 +31,29 @@ END     :=  \033[0m
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	@printf "$(BLUE)> Compilation de $(NAME)... <$(END)"
+	@printf "$(BLUE)> Compiling $(NAME)... <$(END)"
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(OBJS) -o $(NAME)
-	@printf "$(ERASE)$(BLUE)> $(NAME) créé <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> $(NAME) created <$(END)\n"
 
 $(OBJ_DIR)/%.o: src/%.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
-	@printf "$(ERASE)$(BLUE)> Compilation: $< <$(END)"
+	@printf "$(ERASE)$(BLUE)> Compiling: $< <$(END)"
 
 debug: CXXFLAGS = $(DEBUG_FLAGS)
 debug:
-	@printf "$(BLUE)> Mode debug <$(END)\n"
+	@printf "$(BLUE)> Debug mode <$(END)\n"
 	@$(MAKE) all
 
 clean:
-	@printf "$(BLUE)> Suppression des fichiers objets... <$(END)"
+	@printf "$(BLUE)> Removing object files... <$(END)"
 	@rm -rf $(OBJ_DIR)
-	@printf "$(ERASE)$(BLUE)> Fichiers objets supprimés <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> Object files removed <$(END)\n"
 
 fclean: clean
-	@printf "$(BLUE)> Suppression de l'exécutable $(NAME)... <$(END)"
+	@printf "$(BLUE)> Removing executable $(NAME)... <$(END)"
 	@rm -f $(NAME)
-	@printf "$(ERASE)$(BLUE)> $(NAME) supprimé <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> $(NAME) removed <$(END)\n"
 
 re: fclean all
 

@@ -13,6 +13,7 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <cstdlib>
+#include <ctime>
 
 // Fonction to_string personnalisée
 static std::string to_string(int value)
@@ -150,6 +151,9 @@ Runner::~Runner()
 
 void Runner::run(int argc, char **argv)
 {
+    std::time_t serverStartTime = std::time(0);
+    static int logLevel = 1;  // 1=normal, 2=verbose, etc.
+
     std::string configPath = "config.conf";
     if (argc > 1)
         configPath = argv[1];
@@ -194,11 +198,14 @@ void Runner::run(int argc, char **argv)
     std::cout << "Serveur en cours d'exécution sur le port " << port << "..." << std::endl;
 
     struct pollfd fds[200];
-    int nfds = 1;
+    int nfds = 2;
     fds[0].fd = server_fd;
     fds[0].events = POLLIN;
+    fds[1].fd = 0; // STDIN for terminal commands
+    fds[1].events = POLLIN;
 
-    while (true)
+    bool running = true;
+    while (running)
     {
         int poll_count = poll(fds, nfds, -1);
         if (poll_count < 0)
@@ -227,6 +234,103 @@ void Runner::run(int argc, char **argv)
                     std::cout << "Connexion de " << inet_ntoa(client_address.sin_addr)
                               << ":" << ntohs(client_address.sin_port) << std::endl;
                 }
+                else if (fds[i].fd == 0) // Terminal input
+                {
+                    std::string command;
+                    std::getline(std::cin, command);
+                    if (command == "exit")
+                    {
+                        std::cout << "Arrêt du serveur sur commande." << std::endl;
+                        running = false;
+                    }
+                    else if (command == "shutdown")
+                    {
+                        std::cout << "Fermeture GRACEFUL du serveur." << std::endl;
+                        for (int j = 2; j < nfds; j++)
+                        {
+                            close(fds[j].fd);
+                        }
+                        running = false;
+                    }
+                    else if (command == "info")
+                    {
+                        std::cout << "Serveur sur le port: " << port << std::endl;
+                        std::cout << "Chemin de l'index: " << indexPath << std::endl;
+                    }
+                    else if (command == "status")
+                    {
+                        std::cout << "[STATUS] Server is up.\n"
+                                  << "Current connections: " << (nfds - 2) << "\n";
+                    }
+                    else if (command == "list")
+                    {
+                        std::cout << "Connected clients (FDs):\n";
+                        for (int j = 2; j < nfds; j++)
+                        {
+                            std::cout << "  - FD = " << fds[j].fd << "\n";
+                        }
+                    }
+                    else if (command == "help")
+                    {
+                        std::cout << "Available commands:\n"
+                                  << "  help       : Show this help message\n"
+                                  << "  info       : Print server info\n"
+                                  << "  status     : Show server status\n"
+                                  << "  list       : List connected clients\n"
+                                  << "  kick <fd>  : Disconnect a client by its file descriptor\n"
+                                  << "  loglevel <level> : Change logging verbosity\n"
+                                  << "  uptime     : Show how long the server has been running\n"
+                                  << "  clear      : Clear console output\n"
+                                  << "  shutdown   : Graceful stop (close all client connections)\n"
+                                  << "  exit       : Immediate stop\n";
+                    }
+                    else if (command == "clear")
+                    {
+                        std::cout << "\033[2J\033[1;1H" << std::endl;
+                    }
+                    else if (command == "uptime")
+                    {
+                        std::time_t now = std::time(0);
+                        double elapsed = std::difftime(now, serverStartTime);
+                        std::cout << "Server uptime: " << static_cast<int>(elapsed) << " seconds.\n";
+                    }
+                    else if (command.rfind("kick ", 0) == 0)
+                    {
+                        std::stringstream ss(command);
+                        std::string cmd;
+                        int fdToKick;
+                        ss >> cmd >> fdToKick;
+                        bool found = false;
+                        for (int j = 2; j < nfds; j++)
+                        {
+                            if (fds[j].fd == fdToKick)
+                            {
+                                std::cout << "Kicking client FD=" << fdToKick << std::endl;
+                                close(fds[j].fd);
+                                fds[j] = fds[nfds - 1];
+                                nfds--;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found)
+                            std::cout << "No client with FD=" << fdToKick << " found.\n";
+                    }
+                    else if (command.rfind("loglevel ", 0) == 0)
+                    {
+                        std::stringstream ss(command);
+                        std::string cmd;
+                        int newLevel;
+                        ss >> cmd >> newLevel;
+                        logLevel = newLevel;
+                        std::cout << "Log level changed to " << logLevel << "\n";
+                    }
+                    // Reload and broadcast commands have been ignored.
+                    else
+                    {
+                        std::cout << "Commande inconnue: " << command << std::endl;
+                    }
+                }
                 else
                 {
                     handleRequest(fds[i].fd, indexPath);
@@ -237,4 +341,7 @@ void Runner::run(int argc, char **argv)
             }
         }
     }
+
+    close(server_fd);
+    std::cout << "Serveur arrêté." << std::endl;
 }
