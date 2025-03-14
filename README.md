@@ -11,9 +11,6 @@
   <tr>
     <td style="text-align: left; padding: 10px; border: 1px solid #ddd;">
       <p>---
-### **RFC 2616 (HTTP/1.1)**  
-====================
-
 #### **C'est quoi la RFC 2616 ?**
 La **RFC 2616** définit le protocole **HTTP/1.1**, qui est utilisé pour la communication entre les **navigateurs** (les clients) et les **serveurs web**. HTTP/1.1 est la version la plus courante du protocole, et il est responsable des échanges de données entre le client et le serveur.
 
