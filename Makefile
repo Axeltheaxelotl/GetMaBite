@@ -6,7 +6,7 @@
 #    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
-#    Updated: 2025/03/14 11:24:05 by smasse           ###   ########.fr        #
+#    Updated: 2025/03/14 11:24:05 by smasse           ###   ########.fr       #
 #                                                                              #
 # **************************************************************************** #
 
@@ -31,29 +31,29 @@ END     :=  \033[0m
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	@printf "$(BLUE)> Compiling $(NAME)... <$(END)"
+	@printf "$(BLUE)> Compilation de $(NAME)... <$(END)"
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(OBJS) -o $(NAME)
-	@printf "$(ERASE)$(BLUE)> $(NAME) created <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> $(NAME) créé <$(END)\n"
 
 $(OBJ_DIR)/%.o: src/%.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
-	@printf "$(ERASE)$(BLUE)> Compiling: $< <$(END)"
+	@printf "$(ERASE)$(BLUE)> Compilation: $< <$(END)"
 
 debug: CXXFLAGS = $(DEBUG_FLAGS)
 debug:
-	@printf "$(BLUE)> Debug mode <$(END)\n"
+	@printf "$(BLUE)> Mode debug <$(END)\n"
 	@$(MAKE) all
 
 clean:
-	@printf "$(BLUE)> Removing object files... <$(END)"
+	@printf "$(BLUE)> Suppression des fichiers objets... <$(END)"
 	@rm -rf $(OBJ_DIR)
-	@printf "$(ERASE)$(BLUE)> Object files removed <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> Fichiers objets supprimés <$(END)\n"
 
 fclean: clean
-	@printf "$(BLUE)> Removing executable $(NAME)... <$(END)"
+	@printf "$(BLUE)> Suppression de l'exécutable $(NAME)... <$(END)"
 	@rm -f $(NAME)
-	@printf "$(ERASE)$(BLUE)> $(NAME) removed <$(END)\n"
+	@printf "$(ERASE)$(BLUE)> $(NAME) supprimé <$(END)\n"
 
 re: fclean all
 
