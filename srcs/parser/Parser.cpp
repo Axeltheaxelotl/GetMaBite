@@ -1,23 +1,25 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   parser.cpp                                         :+:      :+:    :+:   */
+/*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/03/11 08:34:52 by smasse            #+#    #+#             */
-/*   Updated: 2025/03/12 13:36:09 by smasse           ###   ########.fr       */
+/*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
+/*   Updated: 2025/03/14 12:32:53 by smasse           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include"../webserv.hpp"
 #include<algorithm>
 #include<cctype>
 #include<fstream>
 #include<set>
+#include<iostream>
 #include<sstream>
+#include"Server.hpp"      // added new include
+#include"Location.hpp"    // added new include
 
-struct      NotSpace
+struct NotSpace
 {
 	bool operator()(int ch) const
 	{
@@ -31,6 +33,16 @@ static std::string trim(const std::string &s)
 	result.erase(result.begin(), std::find_if(result.begin(), result.end(), NotSpace()));
 	result.erase(std::find_if(result.rbegin(), result.rend(), NotSpace()).base(), result.end());
 	return (result);
+}
+
+// New helper to resolve relative paths based on a given base.
+static std::string resolvePath(const std::string &base, const std::string &path)
+{
+	if(path.empty() || path[0] == '/')
+		return path;
+	if(base.empty())
+		return path;
+	return base + "/" + path;
 }
 
 static bool isValidIp(const std::string &ip)
@@ -108,12 +120,12 @@ static bool validateServers(const std::vector<Server> &servers)
 	return (true);
 }
 
-bool    parser(const std::string &filepath)
+std::vector<Server> parseConfig(const std::string &filepath)
 {
-	Server      *currentServer;
-	Location    *currentLocation;
-	int         port;
-	size_t      colonPos;
+	Server *currentServer;
+	Location *currentLocation;
+	int port;
+	size_t colonPos;
 	int size;
 	int code;
 	int status;
@@ -121,7 +133,7 @@ bool    parser(const std::string &filepath)
 	if(!file.is_open())
 	{
 		std::cerr << "Error: cannot open file: " << filepath << std::endl;
-		return (false);
+		return std::vector<Server>(); // error return
 	}
 	std::vector<Server> servers;
 	currentServer = 0;
@@ -167,7 +179,7 @@ bool    parser(const std::string &filepath)
 			if(currentLocation)
 			{
 				std::cerr << "Error: 'listen' directive is only allowed in server blocks." << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 			std::string param;
 			iss >> param;
@@ -180,12 +192,12 @@ bool    parser(const std::string &filepath)
 				if(!isValidIp(ipPart))
 				{
 					std::cerr << "Error: invalid IP: " << ipPart << std::endl;
-					return (false);
+					return std::vector<Server>(); // error return
 				}
 				if(portPart.empty() || !isAllDigits(portPart))
 				{
 					std::cerr << "Error: invalid port value: " << portPart << std::endl;
-					return (false);
+					return std::vector<Server>(); // error return
 				}
 				port = std::atoi(portPart.c_str());
 			}
@@ -194,14 +206,14 @@ bool    parser(const std::string &filepath)
 				if(param.empty() || !isAllDigits(param))
 				{
 					std::cerr << "Error: invalid port value: " << param << std::endl;
-					return (false);
+					return std::vector<Server>(); // error return
 				}
 				port = std::atoi(param.c_str());
 			}
 			if(port < 1 || port > 65535)
 			{
 				std::cerr << "Error: invalid port: " << port << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 			if(currentServer)
 				currentServer->listen_ports.push_back(port);
@@ -211,7 +223,7 @@ bool    parser(const std::string &filepath)
 			if(currentLocation)
 			{
 				std::cerr << "Error: 'server_name' directive is not allowed inside location blocks." << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 			std::string name;
 			iss >> name;
@@ -223,7 +235,7 @@ bool    parser(const std::string &filepath)
 			if(currentLocation)
 			{
 				std::cerr << "Error: 'client_max_body_size' directive is only allowed in server blocks." << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 			iss >> size;
 			if(currentServer)
@@ -234,7 +246,7 @@ bool    parser(const std::string &filepath)
 			if(currentLocation)
 			{
 				std::cerr << "Error: 'error_page' directive is only allowed in server blocks." << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 			std::string page;
 			iss >> code >> page;
@@ -250,7 +262,7 @@ bool    parser(const std::string &filepath)
 				if(!currentLocation->root.empty())
 				{
 					std::cerr << "Error: duplicate root directive in location block." << std::endl;
-					return (false);
+					return std::vector<Server>(); // error return
 				}
 				currentLocation->root = path;
 			}
@@ -259,7 +271,7 @@ bool    parser(const std::string &filepath)
 				if(!currentServer->root.empty())
 				{
 					std::cerr << "Error: duplicate root directive in server block." << std::endl;
-					return (false);
+					return std::vector<Server>(); // error return
 				}
 				currentServer->root = path;
 			}
@@ -269,9 +281,14 @@ bool    parser(const std::string &filepath)
 			std::string idx;
 			iss >> idx;
 			if(currentLocation)
-				currentLocation->index = idx;
+			{
+				// Use location root if set, else fallback to server root.
+				currentLocation->index = resolvePath((!currentLocation->root.empty() ? currentLocation->root : (currentServer ? currentServer->root : "")), idx);
+			}
 			else if(currentServer)
-				currentServer->index = idx;
+			{
+				currentServer->index = resolvePath(currentServer->root, idx);
+			}
 		}
 		else if(directive == "allow_methods")
 		{
@@ -294,7 +311,9 @@ bool    parser(const std::string &filepath)
 			std::string path;
 			iss >> path;
 			if(currentLocation)
-				currentLocation->upload_path = path;
+			{
+				currentLocation->upload_path = resolvePath((!currentLocation->root.empty() ? currentLocation->root : (currentServer ? currentServer->root : "")), path);
+			}
 		}
 		else if(directive == "autoindex")
 		{
@@ -318,20 +337,22 @@ bool    parser(const std::string &filepath)
 			std::string alias;
 			iss >> alias;
 			if(currentLocation)
-				currentLocation->alias = alias;
+			{
+				currentLocation->alias = resolvePath((!currentLocation->root.empty() ? currentLocation->root : (currentServer ? currentServer->root : "")), alias);
+			}
 			else
 			{
 				std::cerr << "Error: 'alias' directive is only allowed inside location blocks." << std::endl;
-				return (false);
+				return std::vector<Server>(); // error return
 			}
 		}
 		else
 		{
 			std::cerr << "Error: unknown directive: " << directive << std::endl;
-			return (false);
+			return std::vector<Server>(); // error return
 		}
 	}
 	if(!validateServers(servers))
-		return (false);
-	return (true);
+		return std::vector<Server>(); // error return
+	return servers;
 }
