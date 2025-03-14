@@ -184,7 +184,7 @@ void Runner::run(int argc, char **argv)
                     fds[nfds].fd = client_fd;
                     fds[nfds].events = POLLIN;
                     nfds++;
-                    std::cout << "New connection from " << inet_ntoa(client_address.sin_addr)
+                    std::cout << "cousine a sam " << inet_ntoa(client_address.sin_addr)
                               << ":" << ntohs(client_address.sin_port) << std::endl;
                 }
                 else
