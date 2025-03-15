@@ -14,6 +14,8 @@
 #### **C'est quoi la RFC 2616 ?**
 La **RFC 2616** définit le protocole **HTTP/1.1**, qui est utilisé pour la communication entre les **navigateurs** (les clients) et les **serveurs web**. HTTP/1.1 est la version la plus courante du protocole, et il est responsable des échanges de données entre le client et le serveur.
 
+https://miro.medium.com/v2/resize:fit:4800/format:webp/1*qw6GeQe9tMULtH0ifqtL7Q.png
+
 #### **Ce qu'il faut absolument comprendre :**
 
 1. **Les méthodes HTTP :**  

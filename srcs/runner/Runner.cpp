@@ -325,7 +325,6 @@ void Runner::run(int argc, char **argv)
                         logLevel = newLevel;
                         std::cout << "Log level changed to " << logLevel << "\n";
                     }
-                    // Reload and broadcast commands have been ignored.
                     else
                     {
                         std::cout << "Commande inconnue: " << command << std::endl;
