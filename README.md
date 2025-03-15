@@ -8,5 +8,5 @@
 </p>
 
 <p align="center">
-  <img src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*qw6GeQe9tMULtH0ifqtL7Q.png" alt="Sam et sa cousine" style="width:910px; height:500px;"/>
+  <img src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*qw6GeQe9tMULtH0ifqtL7Q.png" alt="Sam et sa cousine" style="width:915px; height:500px;"/>
 </p>
