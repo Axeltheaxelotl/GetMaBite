@@ -10,3 +10,20 @@
 <p align="center">
   <img src="https://miro.medium.com/v2/resize:fit:4800/format:webp/1*qw6GeQe9tMULtH0ifqtL7Q.png" alt="Sam et sa cousine" style="width:915px; height:500px;"/>
 </p>
+
+<div>
+  <h2 align="center"> Webserv dans ta grosse daronne</h2>
+    <h3 align="left">1.Initialisation du Webserv:</h3>
+     <p>
+        fichiers de base, Structure.
+     </p>
+    <h3 align="left">2.Fichier de configuration:</h3>
+    <p>
+      - L'hote et le port ecouter.<br>
+      - Les routes et les methodes HTTP autorisees.<br>
+      - Configuration des pages d'erreur par default.<br>
+      - Les repertoires a servir, les fichiers a lister et la gestion des fichiers uplaoudes.<br>
+    </p>
+    <h3 align="left">
+
+
