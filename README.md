@@ -65,7 +65,7 @@
             - Gestion des methodes POST et DELETE<br>
             &emsp;- Implementer la gestion des donnees envoyees dans un corps des requetes HTTP.<br>
             &emsp;- Gerer les routes pour les methodes POST et DELETE et tester le televersement des fichiers.<br>
-            - Gestion du CGI:
+            - Gestion du CGI:<br>
             &emsp; - Gestion des scripts CGI
       </td>
       <td>
