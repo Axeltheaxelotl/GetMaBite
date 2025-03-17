@@ -12,7 +12,7 @@
 </p>
 
 <div>
-  <h1 align="center"> Webserv dans ta grosse daronne</h1>
+  <h1 align="center"> WEBSERV DANS TA GROSSE DARONNE</h1>
     <h3 align="left">1.Initialisation du Webserv:</h3>
      <p>
         fichiers de base, Structure.
@@ -41,4 +41,54 @@
       <p>
         - Prevoire des pages d'erreur par default.<br>
         - Si une ressource n'est pas trouvee, renvoyer 404 plus page.
+      </p>
+    <h3 align="left">6.Bonus CGI:</h3>
+      <p>
+        je sais pas si c'est Simon le gay qui le fait.
+      </p>
+
+<div>
+  <table align="center" style="width: 100%; table-layout: fixed;">
+    <tr>
+      <td>
+        <h2 align="center">REPARTION DU PROJET COMME CA SIMON FAIT TOUT</h2>
+         <p>
+            <h4>P1.Gestion des requetes HTTP et reponse:</h4><br>
+            - Initialisation du serveur.<br>
+            &emsp;- fichiers de base et configurez le projet.<br>
+            &emsp;- ecrire le code  de gestion des connections client.<br>
+            - Traitement des requetes HTTP.<br>
+            - Tests les methodes GET et reponses aux requetes simple.
+            <h4>P2.fichier de configuration et gestion des routes:</h4><br>
+            - Parser fichier de configuration.<br>
+            - Assurer la gestion des pages d'erreur personnalisees depuis la configuration<br>
+            - Gestion des methodes POST et DELETE<br>
+            &emsp;- Implementer la gestion des donnees envoyees dans un corps des requetes HTTP.<br>
+            &emsp;- Gerer les routes pour les methodes POST et DELETE et tester le televersement des fichiers.<br>
+            - Gestion du CGI:
+            &emsp; - Gestion des scripts CGI
+      </td>
+      <td>
+        <h2 align="center">STRUCTURE DE MERDE</h2>
+
+    
+
+    webserv/
+    ├── src/
+    │   ├── main.cpp
+    │   ├── serveur.cpp
+    │   ├── request.cpp
+    │   ├── reponse.cpp
+    │   ├── configParser.cpp
+    │   ├── Utils.cpp
+    │   └── CGI.cpp
+    ├── includes/
+    ├── www/
+    ├── config/
+    │   ├── default.conf
+    │   └── error_pages/
+    │       ├── 404.html
+    │       ├── 500.html
+    │       └── ...
+    └── Makefile
 
