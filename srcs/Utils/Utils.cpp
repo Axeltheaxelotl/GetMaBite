@@ -19,10 +19,10 @@ StatusCodeString(short JeSuisPasGayCommeSimon)
     switch (JeSuisPasGayCommeSimon)
     {
         case 100: return "Continue";
-        case 101: return "";
+        case 101: return "Switching Protocols";
 
-        case 200: return "";
-        case 201: return "";
+        case 200: return "OK";
+        case 201: return "Created";
         case 202: return "";
         case 203: return "";
         case 204: return "";
