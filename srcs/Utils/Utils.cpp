@@ -18,7 +18,7 @@ StatusCodeString(short JeSuisPasGayCommeSimon)
 {
     switch (JeSuisPasGayCommeSimon)
     {
-        case 100: return "attente de la suite de la requete";
+        case 100: return "Continue";
         case 101: return "";
 
         case 200: return "";
