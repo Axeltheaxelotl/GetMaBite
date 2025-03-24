@@ -89,6 +89,8 @@
     │       ├── 500.html
     │       └── ...
     └── Makefile
+
+  <img align="center" src="https://i.pinimg.com/736x/35/01/9c/35019c811ce4c988b3d41ae5ce8645a7.jpg" alt="Sam et sa cousine" style="width:550px; height:375px;"/>
     
   </td>
   </tr>
@@ -188,3 +190,5 @@
   &emsp; - Permet de gerer plusieurs connexions simultanement sans blocage.<br>
   &emsp; - TOUT EST POSSIBLE AVEC LA CARTE KIWI.
   </p>
+
+  <img align="center" src="https://i.pinimg.com/736x/e9/74/6d/e9746df423903e050ca3a633fd51ede7.jpg" alt="Sam et sa cousine" style="width:550px; height:250px;"/>
