@@ -1,4 +1,6 @@
 #include "epollDansTaGrosseDaronne.hpp"
+#include <cerrno> // Ajouté pour errno
+#include <cstdlib> // Ajouté pour exit
 
 // constructeur du epollDansTaGrosseDaronne, epoll_fd
 epollDansTaGrosseDaronne::epollDansTaGrosseDaronne()
@@ -24,16 +26,16 @@ void epollDansTaGrosseDaronne::setupServers(std::vector<ServerConfig> servers)
     _servers = servers;
 
     // pour chaque serveur dans la liste de configuration
-    for (auto &it : _servers)
+    for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
     {
-        it.setupServer(); // chaque serveur
-        Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created: %s", it.getServerName().c_str());
+        it->setupServer(); // chaque serveur
+        Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created: %s", it->getServerName().c_str());
 
         // Ajouter chaque serveur à epoll pour la surveillance de la lecture
         epoll_event event;
         event.events = EPOLLIN | EPOLLET; // pour surveiller la lecture non-bloquante
-        event.data.fd = it.getFd(); // descripteur de fichier du serveur
-        addToEpoll(it.getFd(), event);
+        event.data.fd = it->getFd(); // descripteur de fichier du serveur
+        addToEpoll(it->getFd(), event);
     }
 }
 
@@ -84,9 +86,9 @@ void epollDansTaGrosseDaronne::addToEpoll(int fd, epoll_event &event)
 
 bool epollDansTaGrosseDaronne::isServerFd(int fd)
 {
-    for (auto &server : _servers)
+    for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
     {
-        if (server.getFd() == fd)
+        if (it->getFd() == fd)
         {
             return true;
         }

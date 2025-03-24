@@ -3,7 +3,7 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+         #
+#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
 #    Updated: 2025/03/14 11:24:05 by smasse           ###   ########.fr       #

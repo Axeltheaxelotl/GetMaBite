@@ -1,4 +1,8 @@
 #include "ServerConfig.hpp"
+#include <cerrno> // Ajouté pour errno
+#include <cstdlib> // Ajouté pour exit
+#include <cstring> // Ajouté pour memset et strerror
+#include <sstream> // Ajouté pour std::ostringstream
 
 ServerConfig::ServerConfig(const std::string &host, int port)
     : _host(host), _port(port), _server_fd(-1)
@@ -55,5 +59,7 @@ int ServerConfig::getFd() const
 
 std::string ServerConfig::getServerName() const
 {
-    return _host + ":" + std::to_string(_port);
+    std::ostringstream oss;
+    oss << _host << ":" << _port;
+    return oss.str();
 }

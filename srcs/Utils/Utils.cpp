@@ -78,7 +78,9 @@ std::string StatusCodeString(short JeSuisPasGayCommeSimon)
 
 std::string ErreurDansTaGrosseDaronne(short luca)
 {
-    return ("<html>\r\n<head><title>" + std::to_string(luca) + " " +
-            StatusCodeString(luca) + " </title></head>\r\n" + "<body>\r\n" +
-            "<center><h1>" + std::to_string(luca) + " " + StatusCodeString(luca) + "</h1></center>\r\n</body>\r\n</html>");
+    std::ostringstream oss;
+    oss << "<html>\r\n<head><title>" << luca << " " << StatusCodeString(luca) << " </title></head>\r\n"
+        << "<body>\r\n"
+        << "<center><h1>" << luca << " " << StatusCodeString(luca) << "</h1></center>\r\n</body>\r\n</html>";
+    return oss.str();
 }

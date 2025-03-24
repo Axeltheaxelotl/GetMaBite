@@ -64,7 +64,6 @@ static void sendErrorResponse(int client_fd, int statusCode, const std::string &
     sendResponse(client_fd, response);
 }
 
-
 static void handleGET(int client_fd, const std::string &indexPath)
 {
     std::ifstream file(indexPath.c_str());
@@ -78,10 +77,9 @@ static void handleGET(int client_fd, const std::string &indexPath)
     else
     {
         std::cerr << "Erreur 404: Fichier non trouvé" << std::endl;
-        sendErrorResponse(client_fd, 404, "Not Found"); // Removed the fourth argument
+        sendErrorResponse(client_fd, 404, "Not Found");
     }
 }
-
 
 static void handlePOST(int client_fd)
 {
@@ -139,7 +137,6 @@ static void handleRequest(int client_fd, const std::string &indexPath)
     }
     // Vous pouvez ajouter d'autres conditions pour les erreurs 401, 403, 404, etc.
 }
-
 
 Runner::Runner()
 {
