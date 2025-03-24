@@ -90,7 +90,7 @@
     │       └── ...
     └── Makefile
 
-  <img align="center" src="https://i.pinimg.com/736x/35/01/9c/35019c811ce4c988b3d41ae5ce8645a7.jpg" alt="Sam et sa cousine" style="width:550px; height:375px;"/>
+  <img align="center" src="https://i.pinimg.com/736x/35/01/9c/35019c811ce4c988b3d41ae5ce8645a7.jpg" alt="Sam et sa cousine" style="width:550px; height:575px;"/>
     
   </td>
   </tr>
