@@ -97,6 +97,7 @@
   </table>
 </div>
 
+---
 
 <div>
   <h2 align="center">Dit pere castor c quoi "epoll":</h2>
@@ -124,6 +125,10 @@
       <strong>4. /   </strong> Les evenements dont traites en cosequence (accepter une nouvelle connexion, lire des donnees, etc ...).
     </p>
     
+  <h3>EXEMPLE:</h3>
+  
+  ---
+
 
     epollDansTaGrosseDaronne::epollDansTaGrosseDaronne()
     {
@@ -170,21 +175,21 @@
 <div>
   <h2 align="center">Inshallah epoll c plus mieux</h2>
   <p align="left">
-  <strong><h3>select :</h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man2/select.2.html" target="_blank" >🔗select :</a></h3></strong>
   &emsp;- Limite a 1024 descripteurs, nul pour un grand nombre de descripteurs.<br>
   &emsp;- Scanne tous les descripteurs a chaque appel.<br>
   &emsp;- C de la grosse demerde
   </p>
 
   <p>
-  <strong><h3>poll :</h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man2/poll.2.html" target="_blank" >🔗poll :</a ></h3></strong>
   &emsp; - Pas de limite fixe sur le nombre de descripteurs<br>
   &emsp; - Comme le <strong>"select"</strong> de merde, il scanne tous les descripteurs a chaque appel. <br>
   &emsp; - C comme le select c de la merde qu'ils retournes chez eux
   </p>
 
   <p>
-  <strong><h3>epoll :</h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man7/epoll.7.html" target="_blank">🔗epoll :</a></h3></strong>
   &emsp; - Utilise le truc base sur les evenements, bas besoin de scanner tous les descripteurs.<br>
   &emsp; - Gere des miliers de descripteurs avec une surcharge minimal masterchiasse.<br>
   &emsp; - Permet de gerer plusieurs connexions simultanement sans blocage.<br>
