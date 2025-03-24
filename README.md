@@ -196,4 +196,6 @@
   &emsp; - TOUT EST POSSIBLE AVEC LA CARTE KIWI.
   </p>
 
-  <img align="center" src="https://i.pinimg.com/736x/e9/74/6d/e9746df423903e050ca3a633fd51ede7.jpg" alt="Sam et sa cousine" style="width:550px; height:250px;"/>
+<div align="center">
+  <img src="https://i.pinimg.com/736x/9b/a8/79/9ba87924a08294740afbb489b74de37c.jpg" alt="Sam et sa cousine" style="width:6750px; height:350px;"/>
+</div>
