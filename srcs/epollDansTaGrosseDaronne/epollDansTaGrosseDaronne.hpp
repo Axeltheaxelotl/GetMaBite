@@ -2,58 +2,38 @@
 #define EPOLLDANSTAGROSSEDARONNE_HPP
 
 #include <vector>
-#include <map> // std::map
-#include <string>
-#include <sys/epoll.h> // pour epoll
-#include <unistd.h> // systemes de base
-#include <fcntl.h> // operatoins controle fichiers
-#include <netinet/in.h> //structure sockaddr_in, constantes reseaux
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <cstring>
-#include <errno.h>
 #include <iostream>
-#include <sstream>
-#include <fstream>
-#include <sys/wait.h>
+#include "../Logger/Logger.hpp"
+#include "../serverConfig/ServerConfig.hpp"
 
-#include <> //Classe Client pour les clients connectes
-#include <> // Classe pour stocker la configuration des serveurs
-#include <> // Pour enregistrer des messages dans la console
-#include <> // CGI
+#define MAX_EVENTS 10
+#define BUFFER_SIZE 1024
 
-#define BUFFER 1024 // taille message communications
-#define TIMEOUT 60  // fermer connection inactive
-
-// pour gerer les serveurs, les connexions, et les evenement reseau
-class epollDansTaGrosseDarone
+class epollDansTaGrosseDaronne
 {
-    public:
-        
-        epollDansTaGrosseDarone();
+public:
+    epollDansTaGrosseDaronne();
+    ~epollDansTaGrosseDaronne();
 
-        ~epollDansTaGrosseDarone();
+    void setupServers(std::vector<ServerConfig> servers);
+    void serverRun();
 
-        //initialise les serveur a partir de la conf
-        void ewfrwer();
+private:
+    int _epoll_fd;
+    int _biggest_fd;
+    std::vector<ServerConfig> _servers;
+    epoll_event _events[MAX_EVENTS];
 
-        //pour executer la boucle principale du serveur en utiliant epoll pour evenement
-        void wrfkeorgk();
+    void addToEpoll(int fd, epoll_event &event);
+    bool isServerFd(int fd);
+    void acceptConnection(int server_fd);
+    void handleRequest(int client_fd);
+    void setNonBlocking(int fd);
+};
 
-        //pour verifier les connexions client inactives et fermer
-        void eferg();
-
-        //pour initialiser epoll pour gerer les evenements de lecture et d'ecriture
-        void efiwerh();
-
-        //accepter une nouvelle connexion client
-        void jegrth(&serv); 
-
-        //fermer connxion client
-        void rfheroih(const int i);
-
-        //pour envoyer reponse au client
-        void fahi(const int i, ...);
-
-        //
-
-
-}
+#endif // EPOLLDANSTAGROSSEDARONNE_HPP
