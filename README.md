@@ -71,8 +71,6 @@
       <td>
         <h2 align="center">STRUCTURE DE MERDE</h2>
 
-    
-
     webserv/
     ├── src/
     │   ├── main.cpp
@@ -91,4 +89,11 @@
     │       ├── 500.html
     │       └── ...
     └── Makefile
+    
+  </td>
+  </tr>
+</div>
 
+
+<div>
+  fergoi
