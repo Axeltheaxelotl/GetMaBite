@@ -92,8 +92,73 @@
     
   </td>
   </tr>
+  </table>
 </div>
 
 
 <div>
-  fergoi
+  <h2 align="center">Dit pere castor c quoi "epoll":</h2>
+    <p align="left">
+      <strong>1. /  </strong><strong>"epoll"</strong> scanne pas tous les descripteurs de fichiers a chaque appel, il utilise un truc base sur des "evenements".
+    </p>
+    <p>
+      <strong>2. /  </strong>Il gere des miliers de descripteurs de fichier avec une surcharge minimal.
+    </p>
+    <p>
+      <strong>3. / </strong>Non bloquand : permet de gerer plusieurs connexions  simultanement sans etre bloque par une seule operation d'I/O.
+    </p>
+    <p>
+    <h3 align="left"> Fonctionnement de epoll :</h3>
+    <p>
+      <strong>1. /   </strong><strong>"epoll_create1"</strong> cree une instance epoll
+    </p>
+    <p>
+      <strong>2. /   </strong><strong>"epoll_ctl"</strong> ajoute des descriprteurs de fichier a surveiller.
+    </p>
+    <p>
+      <strong>3. /   </strong><strong>"epoll_wait"</strong> attend les evenements sur les descripteurs ajoutes.
+    </p>
+    <p>
+      <strong>4. /   </strong> Les evenements dont traites en cosequence (accepter une nouvelle connexion, lire des donnees, etc ...).
+    </p>
+    
+
+    epollDansTaGrosseDaronne::epollDansTaGrosseDaronne()
+    {
+      _epoll_fd = epoll_create1(0);
+      if (_epoll_fd == -1)
+      {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll creation error: %s", strerror(errno));
+        exit(1);
+      }
+      _biggest_fd = 0;
+    }
+
+    void epollDansTaGrosseDaronne::serverRun()
+    {
+      while (true)
+      {
+        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, -1);
+        if (event_count == -1)
+        {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll wait error: %s", strerror(errno));
+            exit(1);
+        }
+        for (int i = 0; i < event_count; ++i)
+        {
+            if (_events[i].events & EPOLLIN)
+            {
+                if (isServerFd(_events[i].data.fd))
+                {
+                    acceptConnection(_events[i].data.fd);
+                }
+                else
+                {
+                    handleRequest(_events[i].data.fd);
+                }
+            }
+        }
+    }
+}
+
+
