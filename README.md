@@ -100,7 +100,7 @@
 ---
 
 <div>
-  <h2 align="center">Dit pere castor c quoi "epoll":</h2>
+  <h2 align="center">Dit pere castor 🦫 c quoi "epoll":</h2>
     <p align="left">
       <strong>1. /  </strong><strong>"epoll"</strong> scanne pas tous les descripteurs de fichiers a chaque appel, il utilise un truc base sur des "evenements".
     </p>
@@ -127,10 +127,11 @@
     
   <h3>EXEMPLE:</h3>
   
-  ---
 
 
-    epollDansTaGrosseDaronne::epollDansTaGrosseDaronne()
+
+    ‎ 
+    EpollClasse::EpollClasse()
     {
       _epoll_fd = epoll_create1(0);
       if (_epoll_fd == -1)
@@ -141,7 +142,7 @@
       _biggest_fd = 0;
     }
 
-    void epollDansTaGrosseDaronne::serverRun()
+    void EpollClasse::serverRun()
     {
       while (true)
       {
@@ -173,23 +174,23 @@
 </p>
 
 <div>
-  <h2 align="center">Inshallah epoll c plus mieux</h2>
+  <h2 align="center">Inshallah 🕋🤲 epoll c plus mieux</h2>
   <p align="left">
-  <strong><h3><a href="https://man7.org/linux/man-pages/man2/select.2.html" target="_blank" >🔗select :</a></h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man2/select.2.html" target="_blank" >🔗select :👎</a></h3></strong>
   &emsp;- Limite a 1024 descripteurs, nul pour un grand nombre de descripteurs.<br>
   &emsp;- Scanne tous les descripteurs a chaque appel.<br>
   &emsp;- C de la grosse demerde
   </p>
 
   <p>
-  <strong><h3><a href="https://man7.org/linux/man-pages/man2/poll.2.html" target="_blank" >🔗poll :</a ></h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man2/poll.2.html" target="_blank" >🔗poll :👎</a ></h3></strong>
   &emsp; - Pas de limite fixe sur le nombre de descripteurs<br>
   &emsp; - Comme le <strong>"select"</strong> de merde, il scanne tous les descripteurs a chaque appel. <br>
   &emsp; - C comme le select c de la merde qu'ils retournes chez eux
   </p>
 
   <p>
-  <strong><h3><a href="https://man7.org/linux/man-pages/man7/epoll.7.html" target="_blank">🔗epoll :</a></h3></strong>
+  <strong><h3><a href="https://man7.org/linux/man-pages/man7/epoll.7.html" target="_blank">🔗epoll :👍</a></h3></strong>
   &emsp; - Utilise le truc base sur les evenements, bas besoin de scanner tous les descripteurs.<br>
   &emsp; - Gere des miliers de descripteurs avec une surcharge minimal masterchiasse.<br>
   &emsp; - Permet de gerer plusieurs connexions simultanement sans blocage.<br>
@@ -199,3 +200,35 @@
 <div align="center">
   <img src="https://i.pinimg.com/736x/9b/a8/79/9ba87924a08294740afbb489b74de37c.jpg" alt="Sam et sa cousine" style="width:6750px; height:350px;"/>
 </div>
+
+<div>
+  <h2 align="center">Comment que j ai fait le <strong>"epoll"</strong></h2>
+  <p align="left">
+  <strong><h3>1. Constructeur et destructeur :</h3></strong><br>
+  
+  <h3>Constructeur :</h3>
+
+    EpollClasse::EpollClasse()
+    {
+      _epoll_fd = epoll_create1(0);
+      if (_epoll_fd == -1)
+      {
+          Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll creation error: %s", strerror(errno));
+           exit(1);
+      }
+      _biggest_fd = 0;
+    }
+
+  . epoll_created1(0) : cree une instance epoll. Elle retourne un descripteur de fichier _epoll_fd qui et utilise pour surveiller plusieurs descripteurs.<br>
+
+  . <strong>Gestion des erreurs :</strong> si echoue, retourne un message d erreur et ntm le programme.<br>
+
+  . _biggest_fd : stocke le plus grand descripteur de fichier parceque apartement utile pour optimisation que j ai pas fait<br>
+
+<h3>Destructeur :</h3>
+
+un destructeur c un destructeur<br>
+
+
+
+

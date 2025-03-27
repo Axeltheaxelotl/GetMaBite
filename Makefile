@@ -14,7 +14,7 @@ NAME      = webserv
 CXX       = clang++ 
 STD       = -std=c++98
 CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
-INCLUDES  = -I./srcs -I./srcs/serverConfig -I./srcs/epollDansTaGrosseDaronne -I./srcs/parser -I./srcs/runner -I./srcs/Utils -I./srcs/Logger
+INCLUDES  = -I./srcs -I./srcs/serverConfig -I./srcs/EpollClasse -I./srcs/parser -I./srcs/runner -I./srcs/Utils -I./srcs/Logger
 DEBUG_FLAGS = -O0 -g3 -flto $(STD)
 OBJ_DIR   = ./objs
 
@@ -23,7 +23,7 @@ SRCS      = ./srcs/main.cpp \
             ./srcs/runner/Runner.cpp \
             ./srcs/parser/Location.cpp \
             ./srcs/parser/Server.cpp \
-            ./srcs/epollDansTaGrosseDaronne/epollDansTaGrosseDaronne.cpp \
+            ./srcs/epollDansTaGrosseDaronne/EpollClasse.cpp \
             ./srcs/serverConfig/ServerConfig.cpp \
             ./srcs/Utils/Utils.cpp
 
