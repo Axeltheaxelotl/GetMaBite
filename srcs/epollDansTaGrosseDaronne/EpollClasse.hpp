@@ -1,5 +1,5 @@
-#ifndef EPOLLDANSTAGROSSEDARONNE_HPP
-#define EPOLLDANSTAGROSSEDARONNE_HPP
+#ifndef EPOLLCLASSE_HPP
+#define EPOLLCLASSE_HPP
 
 #include <vector>
 #include <sys/epoll.h>
@@ -14,11 +14,11 @@
 #define MAX_EVENTS 10
 #define BUFFER_SIZE 1024
 
-class epollDansTaGrosseDaronne
+class EpollClasse
 {
 public:
-    epollDansTaGrosseDaronne();
-    ~epollDansTaGrosseDaronne();
+    EpollClasse();
+    ~EpollClasse();
 
     void setupServers(std::vector<ServerConfig> servers);
     void serverRun();
@@ -33,7 +33,9 @@ private:
     bool isServerFd(int fd);
     void acceptConnection(int server_fd);
     void handleRequest(int client_fd);
+    void handleWrite(int client_fd);
+    void handleError(int fd);
     void setNonBlocking(int fd);
 };
 
-#endif // EPOLLDANSTAGROSSEDARONNE_HPP
+#endif // EPOLLCLASSE_HPP
