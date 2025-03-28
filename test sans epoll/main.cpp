@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/epoll.h>
+#include <pthread.h>
 #include "../srcs/parser/Parser.hpp"
 #include "../srcs/parser/Server.hpp"
 
@@ -41,6 +42,111 @@ static int setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) return -1;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+struct ConnData {
+    int fd;
+    std::string request;
+};
+
+static void* handleConnection(void* arg) {
+    ConnData* data = static_cast<ConnData*>(arg);
+    int connFd = data->fd;
+    std::string reqStr = data->request;
+    delete data;
+
+    std::istringstream debugStream(reqStr);
+    std::string debugLine;
+    while (std::getline(debugStream, debugLine)) {
+        if (debugLine.rfind("[DEBUG]", 0) == 0) {
+            std::cout << debugLine << std::endl;
+        }
+    }
+
+    std::istringstream reqStream(reqStr);
+    std::string reqLine;
+    std::getline(reqStream, reqLine);
+    // Handle the home page with form and optional CGI output
+    // Accept both GET and POST, but process the command (cmd parameter) only from POST body.
+    std::string cmd;
+    if (reqLine.find("POST /") == 0) {
+        // Find the blank line separating header and body.
+        size_t headerEnd = reqStr.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            cmd = reqStr.substr(headerEnd + 4);
+            cmd = urlDecode(cmd);
+            // Expecting the body to be "cmd=script.py args...", so remove "cmd=".
+            const std::string prefix("cmd=");
+            if (cmd.compare(0, prefix.size(), prefix) == 0)
+                cmd = cmd.substr(prefix.size());
+        }
+    } else if (reqLine.find("GET /") == 0) {
+        // If GET is used, we don't process any command to keep the URL unchanged.
+        cmd = "";
+    }
+    
+    // These values are taken from the server configuration (config.conf)
+    // Since the Server class does not currently hold these values,
+    // we assign them directly based on the config.
+    std::string cgiExtension = ".py";
+    std::string cgiExecutable = "/usr/bin/python3";
+    
+    std::string cgiOutput;
+    if (!cmd.empty()) {
+        // Split the cmd into script and its arguments.
+        std::istringstream iss(cmd);
+        std::string script;
+        std::string args;
+        iss >> script;
+        std::getline(iss, args);
+        
+        // Only process if the script has the CGI extension.
+        if (script.size() >= cgiExtension.size() &&
+            script.compare(script.size() - cgiExtension.size(), cgiExtension.size(), cgiExtension) == 0) {
+            std::string fullPath = "./cgi-stuff-folder/" + script;
+            std::string runCmd = cgiExecutable + " " + fullPath + args;
+            FILE* fp = popen(runCmd.c_str(), "r");
+            if (fp) {
+                char buf[128];
+                while (fgets(buf, sizeof(buf), fp) != NULL) {
+                    std::string line(buf);
+                    if (line.rfind("[DEBUG]", 0) == 0) {
+                        std::cout << line << std::endl;
+                    } else {
+                        cgiOutput += line;
+                    }
+                }
+                pclose(fp);
+            } else {
+                cgiOutput = "Error executing CGI script";
+            }
+        } else {
+            cgiOutput = "Invalid CGI script file extension.";
+        }
+    }
+    
+    std::ostringstream html;
+    html << "<html><body>"
+         << "<form action=\"/\" method=\"POST\">" // Changed to POST so URL remains unchanged.
+         << "<input type=\"text\" name=\"cmd\" placeholder=\"Enter CGI script and args (e.g., script.py arg1)\">";
+    if (!cmd.empty())
+        html << " value=\"" << cmd << "\"";
+    html << "<input type=\"submit\" value=\"Run CGI Script\">"
+         << "</form>";
+    if (!cgiOutput.empty())
+        html << "<div>Output: " << cgiOutput << "</div>";
+    html << "</body></html>";
+    
+    std::string page = html.str();
+    std::ostringstream respStream;
+    respStream << "HTTP/1.1 200 OK\r\n"
+               << "Content-Type: text/html\r\n"
+               << "Content-Length: " << page.size() << "\r\n\r\n"
+               << page;
+    std::string response = respStream.str();
+    send(connFd, response.c_str(), response.size(), 0);
+    close(connFd);
+    return NULL;
 }
 
 int main() {
@@ -123,92 +229,23 @@ int main() {
                     epoll_ctl(epollFd, EPOLL_CTL_ADD, connFd, &connEv);
                 }
             } else if (events[i].events & EPOLLIN) {
-                char buffer[1024];
                 int connFd = events[i].data.fd;
+                char buffer[1024];
                 int bytesRead = read(connFd, buffer, sizeof(buffer) - 1);
                 if (bytesRead > 0) {
                     buffer[bytesRead] = '\0';
-                    
                     std::string reqStr(buffer);
-                    std::istringstream reqStream(reqStr);
-                    std::string reqLine;
-                    std::getline(reqStream, reqLine);
-                    // Handle the home page with form and optional CGI output
-                    // Accept both GET and POST, but process the command (cmd parameter) only from POST body.
-                    std::string cmd;
-                    if (reqLine.find("POST /") == 0) {
-                        // Find the blank line separating header and body.
-                        size_t headerEnd = reqStr.find("\r\n\r\n");
-                        if (headerEnd != std::string::npos) {
-                            cmd = reqStr.substr(headerEnd + 4);
-                            cmd = urlDecode(cmd);
-                            // Expecting the body to be "cmd=script.py args...", so remove "cmd=".
-                            const std::string prefix("cmd=");
-                            if (cmd.compare(0, prefix.size(), prefix) == 0)
-                                cmd = cmd.substr(prefix.size());
-                        }
-                    } else if (reqLine.find("GET /") == 0) {
-                        // If GET is used, we don't process any command to keep the URL unchanged.
-                        cmd = "";
-                    }
-                        
-                    // These values are taken from the server configuration (config.conf)
-                    // Since the Server class does not currently hold these values,
-                    // we assign them directly based on the config.
-                    std::string cgiExtension = ".py";
-                    std::string cgiExecutable = "/usr/bin/python3";
-                        
-                    std::string cgiOutput;
-                    if (!cmd.empty()) {
-                        // Split the cmd into script and its arguments.
-                        std::istringstream iss(cmd);
-                        std::string script;
-                        std::string args;
-                        iss >> script;
-                        std::getline(iss, args);
-                            
-                        // Only process if the script has the CGI extension.
-                        if (script.size() >= cgiExtension.size() &&
-                            script.compare(script.size() - cgiExtension.size(), cgiExtension.size(), cgiExtension) == 0) {
-                            std::string fullPath = "./cgi-stuff-folder/" + script;
-                            std::string runCmd = cgiExecutable + " " + fullPath + args;
-                            FILE* fp = popen(runCmd.c_str(), "r");
-                            if (fp) {
-                                char buf[128];
-                                while (fgets(buf, sizeof(buf), fp) != NULL)
-                                    cgiOutput += buf;
-                                pclose(fp);
-                            } else {
-                                cgiOutput = "Error executing CGI script";
-                            }
-                        } else {
-                            cgiOutput = "Invalid CGI script file extension.";
-                        }
-                    }
-                        
-                    std::ostringstream html;
-                    html << "<html><body>"
-                         << "<form action=\"/\" method=\"POST\">" // Changed to POST so URL remains unchanged.
-                         << "<input type=\"text\" name=\"cmd\" placeholder=\"Enter CGI script and args (e.g., script.py arg1)\">";
-                    if (!cmd.empty())
-                        html << " value=\"" << cmd << "\"";
-                    html << "<input type=\"submit\" value=\"Run CGI Script\">"
-                         << "</form>";
-                    if (!cgiOutput.empty())
-                        html << "<div>Output: " << cgiOutput << "</div>";
-                    html << "</body></html>";
-                        
-                    std::string page = html.str();
-                    std::ostringstream respStream;
-                    respStream << "HTTP/1.1 200 OK\r\n"
-                               << "Content-Type: text/html\r\n"
-                               << "Content-Length: " << page.size() << "\r\n\r\n"
-                               << page;
-                    std::string response = respStream.str();
-                    send(connFd, response.c_str(), response.size(), 0);
+
+                    epoll_ctl(epollFd, EPOLL_CTL_DEL, connFd, NULL);
+
+                    ConnData* data = new ConnData;
+                    data->fd = connFd;
+                    data->request = reqStr;
+
+                    pthread_t tid;
+                    pthread_create(&tid, NULL, handleConnection, data);
+                    pthread_detach(tid);
                 }
-                epoll_ctl(epollFd, EPOLL_CTL_DEL, connFd, NULL);
-                close(connFd);
             }
         }
     }
