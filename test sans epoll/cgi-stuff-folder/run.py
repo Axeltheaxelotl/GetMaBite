@@ -1,15 +1,18 @@
+#!/usr/bin/env python3
 import cgi
 import sys
 import os
 import time
 
-#!/usr/bin/env python3
-
 def main():
+    # Print valid HTTP response header
+    print("HTTP/1.1 200 OK")
     print("Content-Type: text/html")
     print()
+    # Send debug output to stderr so it doesn't interfere with HTTP body
     for i in range(5, 0, -1):
-        print(f"[DEBUG] Waiting: {i} seconds remaining...", flush=True)
+        sys.stderr.write(f"[DEBUG] Waiting: {i} seconds remaining...\n")
+        sys.stderr.flush()
         time.sleep(1)
     form = cgi.FieldStorage()
     args = {key: form.getvalue(key) for key in form.keys()}

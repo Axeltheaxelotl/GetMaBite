@@ -125,25 +125,34 @@ static void* handleConnection(void* arg) {
         }
     }
     
-    std::ostringstream html;
-    html << "<html><body>"
-         << "<form action=\"/\" method=\"POST\">" // Changed to POST so URL remains unchanged.
-         << "<input type=\"text\" name=\"cmd\" placeholder=\"Enter CGI script and args (e.g., script.py arg1)\">";
-    if (!cmd.empty())
-        html << " value=\"" << cmd << "\"";
-    html << "<input type=\"submit\" value=\"Run CGI Script\">"
-         << "</form>";
-    if (!cgiOutput.empty())
-        html << "<div>Output: " << cgiOutput << "</div>";
-    html << "</body></html>";
+    // Build response
+    std::string response;
+    if (!cmd.empty() && !cgiOutput.empty()) {
+        // Let the CGI output control the entire HTTP response (headers, status, content).
+        response = cgiOutput;
+    } else {
+        std::ostringstream html;
+        html << "<html><body>";
+        if (cgiOutput.empty()) {
+            // Display form when no CGI output is generated.
+            html << "<form action=\"/\" method=\"POST\">"
+                 << "<input type=\"text\" name=\"cmd\" placeholder=\"Enter CGI script and args (e.g., script.py arg1)\">"
+                 << "<input type=\"submit\" value=\"Run CGI Script\">"
+                 << "</form>";
+        } else {
+            // Display the CGI element directly.
+            html << cgiOutput;
+        }
+        html << "</body></html>";
     
-    std::string page = html.str();
-    std::ostringstream respStream;
-    respStream << "HTTP/1.1 200 OK\r\n"
-               << "Content-Type: text/html\r\n"
-               << "Content-Length: " << page.size() << "\r\n\r\n"
-               << page;
-    std::string response = respStream.str();
+        std::string page = html.str();
+        std::ostringstream respStream;
+        respStream << "HTTP/1.1 200 OK\r\n"
+                   << "Content-Type: text/html\r\n"
+                   << "Content-Length: " << page.size() << "\r\n\r\n"
+                   << page;
+        response = respStream.str();
+    }
     send(connFd, response.c_str(), response.size(), 0);
     close(connFd);
     return NULL;
@@ -242,6 +251,7 @@ int main() {
                     data->fd = connFd;
                     data->request = reqStr;
 
+                    // Use pthreads for asynchronous handling in C++98
                     pthread_t tid;
                     pthread_create(&tid, NULL, handleConnection, data);
                     pthread_detach(tid);
