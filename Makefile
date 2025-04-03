@@ -25,7 +25,10 @@ SRCS      = ./srcs/main.cpp \
             ./srcs/parser/Server.cpp \
             ./srcs/epollDansTaGrosseDaronne/EpollClasse.cpp \
             ./srcs/serverConfig/ServerConfig.cpp \
-            ./srcs/Utils/Utils.cpp
+            ./srcs/Utils/Utils.cpp \
+			./srcs/routes/RouteHandler.cpp \
+			./srcs/routes/RedirectionHandler.cpp \
+			./srcs/routes/AutoIndex.cpp
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 

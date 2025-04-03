@@ -1,9 +1,12 @@
 #include "EpollClasse.hpp"
 #include <cerrno>
 #include <cstdlib>
-#include <fstream> // Ajouté pour std::ifstream
+#include <fstream>
 #include <cstring>
 #include "../Logger/Logger.hpp"
+#include "../routes/RouteHandler.hpp"
+#include "../routes/RedirectionHandler.hpp"
+#include "../routes/AutoIndex.hpp"
 
 // Constructeur
 EpollClasse::EpollClasse()
@@ -12,7 +15,7 @@ EpollClasse::EpollClasse()
     if (_epoll_fd == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll creation error: %s", strerror(errno));
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     _biggest_fd = 0;
 }
@@ -20,7 +23,10 @@ EpollClasse::EpollClasse()
 // Destructeur
 EpollClasse::~EpollClasse()
 {
-    close(_epoll_fd);
+    if (_epoll_fd != -1)
+    {
+        close(_epoll_fd);
+    }
 }
 
 // Configuration des serveurs
@@ -35,8 +41,9 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers)
         Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created: %s", it->getServerName().c_str());
 
         epoll_event event;
-        event.events = EPOLLIN | EPOLLET;
+        event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
         event.data.fd = it->getFd();
+
         addToEpoll(it->getFd(), event);
     }
 }
@@ -50,7 +57,7 @@ void EpollClasse::serverRun()
         if (event_count == -1)
         {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll wait error: %s", strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
 
         for (int i = 0; i < event_count; ++i)
@@ -81,14 +88,10 @@ void EpollClasse::serverRun()
 // Ajouter un descripteur à epoll
 void EpollClasse::addToEpoll(int fd, epoll_event &event)
 {
-    // Supprimer le FD s'il existe déjà
-    epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
-
-    // Ajouter le FD à epoll
     if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll add error: %s", strerror(errno));
-        exit(1);
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll add error (FD: %d): %s", fd, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 
     if (fd > _biggest_fd)
@@ -121,12 +124,16 @@ void EpollClasse::acceptConnection(int server_fd)
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept error: %s", strerror(errno));
         return;
     }
+
     setNonBlocking(client_fd);
+
     epoll_event event;
-    event.events = EPOLLIN | EPOLLET;
+    event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
     event.data.fd = client_fd;
+
     addToEpoll(client_fd, event);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d",
+                   inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 }
 
 // Gérer une requête client
@@ -140,7 +147,7 @@ void EpollClasse::handleRequest(int client_fd)
         return;
     }
 
-    buffer[bytes_read] = '\0'; // Assurez-vous que la chaîne est terminée
+    buffer[bytes_read] = '\0';
     std::string request(buffer);
 
     // Extraire le chemin du fichier demandé
@@ -199,11 +206,22 @@ void EpollClasse::setNonBlocking(int fd)
     if (flags == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_GETFL error: %s", strerror(errno));
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_SETFL error: %s", strerror(errno));
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 }
+
+/* Modification resume pour pas oublier inshallah
+1. Gestion des erreurs:
+    - messages d erreur detailles avec le fd
+    - Utilisation de exit(EXIT_FAILURE) pour que ca sout plus propre
+2. Sup les truc que j ai fait j ai po compris:
+    - pq il y a un EPOLL_CTL_DEL c nul ca sert a rien parceque il et avant le EPOLL_CTL_ADD mais
+    wtf a quelle moment j ai fait cette merde
+3. Plus lisible mtn:
+4. ROBUSTESSSSSSSSSE:
+    - Verification des retours de toutes les fonctions systeme */
