@@ -4,8 +4,6 @@
 #include <fstream>
 #include <cstring>
 #include "../Logger/Logger.hpp"
-#include "../routes/RouteHandler.hpp"
-#include "../routes/RedirectionHandler.hpp"
 #include "../routes/AutoIndex.hpp"
 
 // Constructeur
@@ -30,10 +28,11 @@ EpollClasse::~EpollClasse()
 }
 
 // Configuration des serveurs
-void EpollClasse::setupServers(std::vector<ServerConfig> servers)
+void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vector<Server> &serverConfigs)
 {
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Setting up servers...");
     _servers = servers;
+    _serverConfigs = serverConfigs;
 
     for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
     {
@@ -72,10 +71,6 @@ void EpollClasse::serverRun()
                 {
                     handleRequest(_events[i].data.fd);
                 }
-            }
-            else if (_events[i].events & EPOLLOUT)
-            {
-                handleWrite(_events[i].data.fd);
             }
             else if (_events[i].events & (EPOLLERR | EPOLLHUP))
             {
@@ -136,6 +131,15 @@ void EpollClasse::acceptConnection(int server_fd)
                    inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 }
 
+// Résoudre le chemin demandé
+std::string EpollClasse::resolvePath(const Server &server, const std::string &requestedPath)
+{
+    if (requestedPath == "/")
+        return server.root + "/" + server.index;
+
+    return server.root + requestedPath;
+}
+
 // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd)
 {
@@ -151,18 +155,17 @@ void EpollClasse::handleRequest(int client_fd)
     std::string request(buffer);
 
     // Extraire le chemin du fichier demandé
-    std::string filePath = "./www/index.html"; // Par défaut, servir index.html
+    std::string requestedPath = "/";
     size_t pos = request.find("GET ");
     if (pos != std::string::npos)
     {
         size_t start = pos + 4; // Après "GET "
         size_t end = request.find(" ", start);
-        std::string requestedPath = request.substr(start, end - start);
-        if (requestedPath != "/" && !requestedPath.empty())
-        {
-            filePath = "./www" + requestedPath; // Ajouter le chemin demandé
-        }
+        requestedPath = request.substr(start, end - start);
     }
+
+    // Résoudre le chemin en fonction du serveur
+    std::string filePath = resolvePath(_serverConfigs[0], requestedPath); // Exemple avec le premier serveur
 
     // Ouvrir et lire le fichier demandé
     std::ifstream file(filePath.c_str());
@@ -181,14 +184,6 @@ void EpollClasse::handleRequest(int client_fd)
         send(client_fd, errorResponse.c_str(), errorResponse.size(), 0);
     }
 
-    close(client_fd);
-}
-
-// Gérer une réponse client
-void EpollClasse::handleWrite(int client_fd)
-{
-    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!";
-    send(client_fd, response.c_str(), response.size(), 0);
     close(client_fd);
 }
 
@@ -215,13 +210,15 @@ void EpollClasse::setNonBlocking(int fd)
     }
 }
 
-/* Modification resume pour pas oublier inshallah
-1. Gestion des erreurs:
-    - messages d erreur detailles avec le fd
-    - Utilisation de exit(EXIT_FAILURE) pour que ca sout plus propre
-2. Sup les truc que j ai fait j ai po compris:
-    - pq il y a un EPOLL_CTL_DEL c nul ca sert a rien parceque il et avant le EPOLL_CTL_ADD mais
-    wtf a quelle moment j ai fait cette merde
-3. Plus lisible mtn:
-4. ROBUSTESSSSSSSSSE:
-    - Verification des retours de toutes les fonctions systeme */
+/*
+Modification wsh:
+    - gestion des chemins "dynamique" Methode resolvePath utilise les parametres root et index pour construire le chemin
+    complet.
+
+    - Support les serveurs multiples, les configurations des serveurs sont stockees dans _serverConfigs comme simon
+    me la gentillement propose
+
+    - Verification des erreurs pour toutes les operations CRITIQUES!!!
+
+    - Autoindex mtn je peut integrer AutoIndex::generateAutoIndexPage pour generer une page d'index si necessaire.
+*/

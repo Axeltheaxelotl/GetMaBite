@@ -10,6 +10,7 @@
 #include <iostream>
 #include "../Logger/Logger.hpp"
 #include "../serverConfig/ServerConfig.hpp"
+#include "../parser/Server.hpp"
 
 #define MAX_EVENTS 10
 #define BUFFER_SIZE 1024
@@ -20,13 +21,14 @@ public:
     EpollClasse();
     ~EpollClasse();
 
-    void setupServers(std::vector<ServerConfig> servers);
+    void setupServers(std::vector<ServerConfig> servers, const std::vector<Server> &serverConfigs);
     void serverRun();
 
 private:
     int _epoll_fd;
     int _biggest_fd;
     std::vector<ServerConfig> _servers;
+    std::vector<Server> _serverConfigs; // Ajout pour stocker les configurations des serveurs
     epoll_event _events[MAX_EVENTS];
 
     void addToEpoll(int fd, epoll_event &event);
@@ -36,6 +38,7 @@ private:
     void handleWrite(int client_fd);
     void handleError(int fd);
     void setNonBlocking(int fd);
+    std::string resolvePath(const Server &server, const std::string &requestedPath);
 };
 
-#endif // EPOLLCLASSE_HPP
+#endif
