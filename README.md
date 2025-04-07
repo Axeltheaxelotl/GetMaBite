@@ -90,8 +90,6 @@
     │       └── ...
     └── Makefile
 
-  <img align="center" src="https://i.pinimg.com/736x/35/01/9c/35019c811ce4c988b3d41ae5ce8645a7.jpg" alt="Sam et sa cousine" style="width:550px; height:450px;"/>
-    
   </td>
   </tr>
   </table>
@@ -196,10 +194,6 @@
   &emsp; - Permet de gerer plusieurs connexions simultanement sans blocage.<br>
   &emsp; - TOUT EST POSSIBLE AVEC LA CARTE KIWI.
   </p>
-
-<div align="center">
-  <img src="https://i.pinimg.com/736x/9b/a8/79/9ba87924a08294740afbb489b74de37c.jpg" alt="Sam et sa cousine" style="width:6750px; height:350px;"/>
-</div>
 
 <div>
   <h2 align="center">Comment que j ai fait le <strong>"epoll"</strong></h2>
