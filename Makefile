@@ -30,7 +30,7 @@ SRCS      = ./srcs/main.cpp \
 			./srcs/routes/RedirectionHandler.cpp \
 			./srcs/routes/AutoIndex.cpp
 
-OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
+OBJS      = $(patsubst ./srcs/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
 ERASE	:=	\033[2K\r
 BLUE    :=  \033[34m
@@ -41,11 +41,11 @@ END     :=  \033[0m
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	@printf "$(BLUE)> Compiling $(NAME)... <$(END)"
+	@printf "$(ERASE)$(BLUE)> Compiling $(NAME)... <$(END)"
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(OBJS) -o $(NAME)
 	@printf "$(ERASE)$(BLUE)> $(NAME) created <$(END)\n"
 
-$(OBJ_DIR)/%.o: src/%.cpp
+$(OBJ_DIR)/%.o: ./srcs/%.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 	@printf "$(ERASE)$(BLUE)> Compiling: $< <$(END)"
