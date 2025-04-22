@@ -1,0 +1,59 @@
+# Compiled Object files
+*.o
+*.obj
+*.ko
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.la
+*.lai
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+webserv2
+webserv
+
+# Build directories
+build/
+bin/
+obj/
+
+# Dependencies
+deps/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+
+# Project specific
+/test sans epoll/*.o
+/test sans epoll/webserv2
