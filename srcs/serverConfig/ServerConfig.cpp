@@ -9,7 +9,12 @@ ServerConfig::ServerConfig(const std::string &host, int port)
 {
     memset(&_address, 0, sizeof(_address));
     _address.sin_family = AF_INET;
-    _address.sin_addr.s_addr = inet_addr(_host.c_str());
+    if (host.empty()) {
+        _address.sin_addr.s_addr = htonl(INADDR_ANY);
+        _host = "0.0.0.0";
+    } else {
+        _address.sin_addr.s_addr = inet_addr(_host.c_str());
+    }
     _address.sin_port = htons(_port);
 }
 
