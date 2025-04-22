@@ -13,7 +13,13 @@ ServerConfig::ServerConfig(const std::string &host, int port)
         _address.sin_addr.s_addr = htonl(INADDR_ANY);
         _host = "0.0.0.0";
     } else {
-        _address.sin_addr.s_addr = inet_addr(_host.c_str());
+        in_addr_t addr = inet_addr(_host.c_str());
+        if (addr == INADDR_NONE) {
+            _address.sin_addr.s_addr = htonl(INADDR_ANY);
+            _host = "0.0.0.0";
+        } else {
+            _address.sin_addr.s_addr = addr;
+        }
     }
     _address.sin_port = htons(_port);
 }
