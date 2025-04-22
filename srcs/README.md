@@ -1,4 +1,11 @@
-### Resumation du projet
+
+<p align="center">
+<img src="https://i.pinimg.com/736x/2c/2c/eb/2c2cebe8f7d647efd430755693a28abf.jpg" alt="nique ta mere" width="800" height="300"/>
+<img>
+</p>
+
+
+<h1 align="center">RESUMATION DU PROJET</h1>
 
 1. **But général**
 
