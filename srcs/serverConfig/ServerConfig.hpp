@@ -18,6 +18,10 @@ public:
     void setupServer();
     int getFd() const;
     std::string getServerName() const;
+    
+    // Ajout des getters manquants
+    std::string getHost() const { return _host; }
+    int getPort() const { return _port; }
 
 private:
     std::string _host;

@@ -21,11 +21,19 @@ int main(int argc, char **argv)
 
     // Convertir les objets Server en ServerConfig
     std::vector<ServerConfig> serverConfigs;
-    for (size_t i = 0; i < servers.size(); ++i)
+    for (std::vector<Server>::const_iterator it = servers.begin(); it != servers.end(); ++it)
     {
-        for (size_t j = 0; j < servers[i].listen_ports.size(); ++j)
+        std::string host = "0.0.0.0"; // Valeur par défaut
+        if (!it->server_names.empty())
         {
-            serverConfigs.push_back(ServerConfig(servers[i].root, servers[i].listen_ports[j]));
+            host = it->server_names[0]; // Utilise le premier nom de serveur comme host
+        }
+        
+        for (std::vector<int>::const_iterator portIt = it->listen_ports.begin(); 
+             portIt != it->listen_ports.end(); ++portIt)
+        {
+            ServerConfig config(host, *portIt);
+            serverConfigs.push_back(config);
         }
     }
 

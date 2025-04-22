@@ -34,6 +34,12 @@ ServerConfig::~ServerConfig()
 
 void ServerConfig::setupServer()
 {
+    // Fermer le socket s'il était déjà ouvert
+    if (_server_fd != -1)
+    {
+        close(_server_fd);
+    }
+
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1)
     {
@@ -41,22 +47,41 @@ void ServerConfig::setupServer()
         exit(1);
     }
 
+    // Configuration des options du socket
     int opt = 1;
     if (setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Setsockopt error: %s", strerror(errno));
+        close(_server_fd);
+        exit(1);
+    }
+
+    // Mode non-bloquant
+    int flags = fcntl(_server_fd, F_GETFL, 0);
+    if (flags == -1)
+    {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
+        close(_server_fd);
+        exit(1);
+    }
+    if (fcntl(_server_fd, F_SETFL, flags | O_NONBLOCK) == -1)
+    {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
+        close(_server_fd);
         exit(1);
     }
 
     if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Bind error: %s", strerror(errno));
+        close(_server_fd);
         exit(1);
     }
 
-    if (listen(_server_fd, 10) == -1)
+    if (listen(_server_fd, SOMAXCONN) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Listen error: %s", strerror(errno));
+        close(_server_fd);
         exit(1);
     }
 
