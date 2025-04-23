@@ -17,6 +17,30 @@ static std::string sizeToString(size_t value)
     return oss.str();
 }
 
+// Utilitaire pour joindre deux chemins sans double slash
+static std::string joinPath(const std::string& left, const std::string& right) {
+    if (left.empty()) return right;
+    if (right.empty()) return left;
+    if (left[left.size() - 1] == '/' && right[0] == '/')
+        return left + right.substr(1);
+    if (left[left.size() - 1] != '/' && right[0] != '/')
+        return left + "/" + right;
+    return left + right;
+}
+
+// Utilitaire pour éviter le doublon de dossier (ex: /tests/tests/)
+static std::string smartJoinRootAndPath(const std::string& root, const std::string& path) {
+    // Si root se termine par un dossier (ex: /tests/) et path commence par ce dossier (ex: /tests/...), on évite le doublon
+    size_t lastSlash = root.find_last_of('/', root.length() - 2); // ignore le slash final
+    std::string rootDir = root.substr(lastSlash + 1, root.length() - lastSlash - 2); // nom du dossier root sans slash
+    std::string prefix = "/" + rootDir + "/";
+    if (rootDir.length() > 0 && path.find(prefix) == 0) {
+        return joinPath(root, path.substr(prefix.length()));
+    }
+    // Sinon, comportement normal
+    return joinPath(root, path[0] == '/' ? path.substr(1) : path);
+}
+
 // Constructeur
 EpollClasse::EpollClasse()
 {
@@ -153,11 +177,11 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
     // Si le chemin demandé est la racine, renvoyer le fichier index
     if (requestedPath == "/")
     {
-        // Éviter les doubles slashes
-        std::string path = server.root;
-        if (!path.empty() && path[path.length() - 1] == '/')
-            return path + server.index;
-        return path + "/" + server.index;
+        // Si index est déjà un chemin absolu, le retourner directement
+        if (!server.index.empty() && server.index[0] == '/')
+            return server.index;
+        // Sinon, concaténer root + index proprement
+        return joinPath(server.root, server.index);
     }
 
     // Pour tout autre chemin, vérifier si une location correspond
@@ -169,25 +193,16 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
             // Si un alias est défini, l'utiliser
             if (!it->alias.empty())
             {
-                std::string path = it->alias;
-                if (!path.empty() && path[path.length() - 1] == '/')
-                    return path + requestedPath.substr(1);
-                return path + requestedPath;
+                return joinPath(it->alias, requestedPath);
             }
-            
             // Sinon utiliser le root de la location ou du serveur
             std::string root = !it->root.empty() ? it->root : server.root;
-            if (!root.empty() && root[root.length() - 1] == '/')
-                return root + requestedPath.substr(1);
-            return root + requestedPath;
+            return smartJoinRootAndPath(root, requestedPath.substr(1));
         }
     }
 
     // Si aucune location ne correspond, utiliser le root du serveur
-    std::string path = server.root;
-    if (!path.empty() && path[path.length() - 1] == '/')
-        return path + requestedPath.substr(1);
-    return path + requestedPath;
+    return smartJoinRootAndPath(server.root, requestedPath);
 }
 
 // Gérer une requête client
@@ -217,17 +232,9 @@ void EpollClasse::handleRequest(int client_fd)
     // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
     const Server& server = _serverConfigs[0];
 
-    // Si le chemin est "/", on utilise l'index configuré
-    std::string resolvedPath;
-    if (path == "/")
-    {
-        resolvedPath = server.index;
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Using index file: %s", resolvedPath.c_str());
-    }
-    else
-    {
-        resolvedPath = server.root + path;
-    }
+    // Utiliser resolvePath pour obtenir le chemin réel
+    std::string resolvedPath = resolvePath(server, path);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
 
     // Vérifier si le fichier existe
     struct stat file_stat;
