@@ -5,9 +5,9 @@
 #include <cstring>
 #include <sstream>
 #include <sys/stat.h>
-#include "../Logger/Logger.hpp"
+#include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
-#include "../Utils/Utils.hpp"
+#include "../utils/Utils.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)

@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "../serverConfig/ServerConfig.hpp"
-#include "../parser/Server.hpp"
+#include "../config/Server.hpp"
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096

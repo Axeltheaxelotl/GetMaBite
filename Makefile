@@ -14,22 +14,23 @@ NAME      = webserv
 CXX       = clang++ 
 STD       = -std=c++98
 CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
-INCLUDES  = -I./srcs -I./srcs/serverConfig -I./srcs/EpollClasse -I./srcs/parser -I./srcs/Utils -I./srcs/Logger
+INCLUDES  = -Isrc -Isrc/serverConfig -Isrc/core -Isrc/config -Isrc/utils -Isrc/routes
 DEBUG_FLAGS = -O0 -g3 -flto $(STD)
 OBJ_DIR   = ./objs
 
-SRCS      = ./srcs/main.cpp \
-            ./srcs/parser/Parser.cpp \
-            ./srcs/parser/Location.cpp \
-            ./srcs/parser/Server.cpp \
-            ./srcs/epollDansTaGrosseDaronne/EpollClasse.cpp \
-            ./srcs/serverConfig/ServerConfig.cpp \
-            ./srcs/Utils/Utils.cpp \
-			./srcs/routes/RouteHandler.cpp \
-			./srcs/routes/RedirectionHandler.cpp \
-			./srcs/routes/AutoIndex.cpp
+SRCS      = src/main.cpp \
+            src/config/Parser.cpp \
+            src/config/Location.cpp \
+            src/config/Server.cpp \
+            src/core/EpollClasse.cpp \
+            src/serverConfig/ServerConfig.cpp \
+            src/utils/Utils.cpp \
+            src/utils/Logger.cpp \
+            src/routes/RouteHandler.cpp \
+            src/routes/RedirectionHandler.cpp \
+            src/routes/AutoIndex.cpp
 
-OBJS      = $(patsubst ./srcs/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
+OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
 ERASE	:=	\033[2K\r
 BLUE    :=  \033[34m
@@ -44,7 +45,7 @@ $(NAME): $(OBJS)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(OBJS) -o $(NAME)
 	@printf "$(ERASE)$(BLUE)> $(NAME) created <$(END)\n"
 
-$(OBJ_DIR)/%.o: ./srcs/%.cpp
+$(OBJ_DIR)/%.o: src/%.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 	@printf "$(ERASE)$(BLUE)> Compiling: $< <$(END)"

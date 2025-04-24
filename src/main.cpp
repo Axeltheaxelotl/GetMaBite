@@ -1,5 +1,5 @@
-#include "epollDansTaGrosseDaronne/EpollClasse.hpp"
-#include "parser/Parser.hpp"
+#include "core/EpollClasse.hpp"
+#include "config/Parser.hpp"
 #include "serverConfig/ServerConfig.hpp"
 #include <vector>
 #include <iostream>
