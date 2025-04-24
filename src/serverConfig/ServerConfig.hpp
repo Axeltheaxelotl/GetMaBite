@@ -26,7 +26,7 @@ public:
 private:
     std::string _host;
     int _port;
-    int _server_fd;
+    int _server_fd; // Ajout du membre manquant
     struct sockaddr_in _address;
 };
 

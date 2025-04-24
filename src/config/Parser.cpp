@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
+/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/03/14 12:32:53 by smasse           ###   ########.fr       */
+/*   Updated: 2025/04/24 14:57:21 by alanty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -282,12 +282,11 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			iss >> idx;
 			if(currentLocation)
 			{
-				// Use location root if set, else fallback to server root.
-				currentLocation->index = resolvePath((!currentLocation->root.empty() ? currentLocation->root : (currentServer ? currentServer->root : "")), idx);
+				currentLocation->index = idx;
 			}
 			else if(currentServer)
 			{
-				currentServer->index = resolvePath(currentServer->root, idx);
+				currentServer->index = idx;
 			}
 		}
 		else if(directive == "allow_methods")
