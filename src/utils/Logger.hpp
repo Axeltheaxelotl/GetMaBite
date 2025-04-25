@@ -8,6 +8,7 @@
 #define RED "\033[31m"
 #define GREEN "\033[32m"
 #define LIGHTMAGENTA "\033[95m"
+#define YELLOW "\033[33m"
 #define CONSOLE_OUTPUT 1
 
 class Logger

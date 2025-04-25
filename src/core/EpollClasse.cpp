@@ -215,21 +215,25 @@ void EpollClasse::handleRequest(int client_fd)
 {
     char buffer[BUFFER_SIZE];
     int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
+    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] read %d bytes from fd %d", bytes_read, client_fd);
     if (bytes_read <= 0)
     {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Closing fd %d (read <= 0)", client_fd);
         close(client_fd);
         _bufferManager.remove(client_fd);
         return;
     }
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
 
     if (!_bufferManager.isRequestComplete(client_fd)) {
-        // Attendre la suite de la requête
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data", client_fd);
         return;
     }
 
     std::string request = _bufferManager.get(client_fd);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
     _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP

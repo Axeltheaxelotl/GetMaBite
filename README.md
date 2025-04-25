@@ -119,3 +119,13 @@ test=fragment
 &emsp; . et que la reponse HTTP et correcte meme si elle arrive ne plusieurs morceaux.
 
 
+pas faire les tests du haut c de la merde faire ca c plus mieux
+```sh
+import socket
+s = socket.socket()
+s.connect(('localhost', 8081))
+s.send(b"POST / HTTP/1.1\r\nHost: localhost:8081\r\nContent-Length: 13\r\n\r\n")
+s.send(b"test=fragment")
+print(s.recv(4096).decode())
+s.close()
+```

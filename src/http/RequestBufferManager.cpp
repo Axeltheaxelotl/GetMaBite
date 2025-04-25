@@ -1,5 +1,6 @@
 #include "RequestBufferManager.hpp"
 #include <cstdlib>
+#include <cstdio>
 
 void RequestBufferManager::append(int client_fd, const std::string& data) {
     buffers[client_fd] += data;
@@ -30,8 +31,12 @@ bool RequestBufferManager::isRequestComplete(int client_fd) {
         if (value_start != std::string::npos) {
             size_t value_end = buf.find("\r\n", value_start);
             int content_length = std::atoi(buf.substr(value_start, value_end - value_start).c_str());
-            size_t total_size = header_end + 4 + content_length;
-            return buf.size() >= total_size;
+            size_t body_start = header_end + 4;
+            size_t body_received = buf.size() - body_start;
+            // Ajout du log de debug
+            printf("[isRequestComplete] fd %d: Content-Length=%d, body_received=%zu\n", client_fd, content_length, body_received);
+            printf("[isRequestComplete] fd %d: body=\"%s\"\n", client_fd, buf.substr(body_start, body_received).c_str());
+            return body_received >= (size_t)content_length;
         }
     }
     // Sinon, requête sans body
