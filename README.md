@@ -64,7 +64,7 @@ server {
 - [x] Suppression de fichiers (DELETE)
 - [x] Gestion des redirections HTTP
 - [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
-- [ ] Gestion correcte des fragments de requêtes HTTP
+- [x] Gestion correcte des fragments de requêtes HTTP
 - [ ] Gestion stricte C++98
 - [ ] Gestion des pages d’erreur personnalisées
 - [ ] Support de plusieurs server_name par serveur
@@ -114,4 +114,8 @@ Content-Length: 11
 
 test=fragment
 ```
+&emsp; . verifier que le serveur essaie pas de traiter la requete tant qu'elle n'est pas complete<br>
+&emsp; . que le serveur ne ferme pas ca connection prematurement<br>
+&emsp; . et que la reponse HTTP et correcte meme si elle arrive ne plusieurs morceaux.
+
 
