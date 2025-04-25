@@ -38,6 +38,7 @@ private:
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);
+    void sendErrorResponse(int client_fd, int code, const Server& server);
 
 public:
     EpollClasse();

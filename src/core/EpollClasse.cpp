@@ -330,12 +330,7 @@ void EpollClasse::handleRequest(int client_fd)
     {
         // Fichier non trouvé
         Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found: %s", resolvedPath.c_str());
-        std::string errorContent = "<html><body><h1>404 Not Found</h1></body></html>";
-        std::string response = "HTTP/1.1 404 Not Found\r\n"
-                            "Content-Type: text/html\r\n"
-                            "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                            + errorContent;
-        sendResponse(client_fd, response);
+        sendErrorResponse(client_fd, 404, server);
     }
 
     close(client_fd);
@@ -364,23 +359,18 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &request, c
     size_t body_pos = request.find("\r\n\r\n");
     if (body_pos == std::string::npos)
     {
-        std::string response = "HTTP/1.1 400 Bad Request\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>400 Bad Request</h1></body></html>";
-        sendResponse(client_fd, response);
+        sendErrorResponse(client_fd, 400, _serverConfigs[0]);
         close(client_fd);
         return;
     }
 
     std::string body = request.substr(body_pos + 4);
-    
-    // Créer ou mettre à jour le fichier
+    // Créer ou écraser le fichier (POST doit créer le fichier s'il n'existe pas)
     std::ofstream outFile(filePath.c_str());
     if (outFile)
     {
         outFile << body;
         outFile.close();
-        
         std::string response = "HTTP/1.1 201 Created\r\n"
                              "Content-Type: text/html\r\n\r\n"
                              "<html><body><h1>201 Created</h1></body></html>";
@@ -388,29 +378,21 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &request, c
     }
     else
     {
-        std::string response = "HTTP/1.1 403 Forbidden\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>403 Forbidden</h1></body></html>";
-        sendResponse(client_fd, response);
+        sendErrorResponse(client_fd, 403, _serverConfigs[0]);
     }
     close(client_fd);
 }
 
 void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath)
 {
-    if (std::remove(filePath.c_str()) == 0)
+    if (remove(filePath.c_str()) == 0)
     {
-        std::string response = "HTTP/1.1 200 OK\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>File deleted successfully</h1></body></html>";
+        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>200 OK</h1></body></html>";
         sendResponse(client_fd, response);
     }
     else
     {
-        std::string response = "HTTP/1.1 404 Not Found\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>404 File Not Found</h1></body></html>";
-        sendResponse(client_fd, response);
+        sendErrorResponse(client_fd, 404, _serverConfigs[0]);
     }
     close(client_fd);
 }
@@ -555,4 +537,34 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
         sendResponse(client_fd, response);
     }
     close(client_fd);
+}
+
+// Envoie une réponse d'erreur HTTP personnalisée si possible
+void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server) {
+    std::string body;
+    std::string status = StatusCodeString(code);
+    std::string contentType = "text/html";
+    std::string customPath;
+    std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+    if (it != server.error_pages.end()) {
+        // On tente de lire le fichier d'erreur personnalisé
+        std::ifstream file(it->second.c_str());
+        if (file.is_open()) {
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            body = ss.str();
+            file.close();
+        } else {
+            // Fichier non trouvé, fallback sur la page par défaut
+            body = ErreurDansTaGrosseDaronne(code);
+        }
+    } else {
+        body = ErreurDansTaGrosseDaronne(code);
+    }
+    std::ostringstream response;
+    response << "HTTP/1.1 " << code << " " << status << "\r\n"
+             << "Content-Type: " << contentType << "\r\n"
+             << "Content-Length: " << body.size() << "\r\n\r\n"
+             << body;
+    sendResponse(client_fd, response.str());
 }
