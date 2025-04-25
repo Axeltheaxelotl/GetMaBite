@@ -30,15 +30,19 @@ static std::string joinPath(const std::string& left, const std::string& right) {
 
 // Utilitaire pour éviter le doublon de dossier (ex: /tests/tests/)
 static std::string smartJoinRootAndPath(const std::string& root, const std::string& path) {
-    // Si root se termine par un dossier (ex: /tests/) et path commence par ce dossier (ex: /tests/...), on évite le doublon
-    size_t lastSlash = root.find_last_of('/', root.length() - 2); // ignore le slash final
-    std::string rootDir = root.substr(lastSlash + 1, root.length() - lastSlash - 2); // nom du dossier root sans slash
-    std::string prefix = "/" + rootDir + "/";
-    if (rootDir.length() > 0 && path.find(prefix) == 0) {
-        return joinPath(root, path.substr(prefix.length()));
-    }
-    // Sinon, comportement normal
-    return joinPath(root, path[0] == '/' ? path.substr(1) : path);
+    // Nettoie les slashes
+    std::string cleanRoot = root;
+    if (!cleanRoot.empty() && cleanRoot[cleanRoot.size() - 1] == '/')
+        cleanRoot = cleanRoot.substr(0, cleanRoot.size() - 1);
+    std::string cleanPath = path;
+    if (!cleanPath.empty() && cleanPath[0] == '/')
+        cleanPath = cleanPath.substr(1);
+    // Si le path commence déjà par le nom du dossier root, on ne le rajoute pas
+    size_t lastSlash = cleanRoot.find_last_of('/');
+    std::string rootDir = (lastSlash != std::string::npos) ? cleanRoot.substr(lastSlash + 1) : cleanRoot;
+    if (cleanPath.find(rootDir + "/") == 0)
+        return cleanRoot + "/" + cleanPath.substr(rootDir.length() + 1);
+    return cleanRoot + "/" + cleanPath;
 }
 
 // Constructeur
@@ -232,6 +236,53 @@ void EpollClasse::handleRequest(int client_fd)
     // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
     const Server& server = _serverConfigs[0];
 
+    // Trouver la location correspondante (plus long préfixe)
+    const Location* matchedLocation = NULL;
+    size_t maxMatch = 0;
+    for (std::vector<Location>::const_iterator it = server.locations.begin(); it != server.locations.end(); ++it)
+    {
+        if (path.find(it->path) == 0 && it->path.length() > maxMatch)
+        {
+            matchedLocation = &(*it);
+            maxMatch = it->path.length();
+        }
+    }
+
+    // Vérification stricte des allow_methods
+    if (matchedLocation)
+    {
+        bool allowed = false;
+        for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+        {
+            if (matchedLocation->allow_methods[i] == method)
+            {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed)
+        {
+            // Générer la liste des méthodes autorisées
+            std::string allowHeader = "Allow: ";
+            for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+            {
+                if (i > 0) allowHeader += ", ";
+                allowHeader += matchedLocation->allow_methods[i];
+            }
+            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+            std::ostringstream response;
+            response << "HTTP/1.1 405 Method Not Allowed\r\n"
+                     << allowHeader << "\r\n"
+                     << "Content-Type: text/html\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "\r\n"
+                     << body;
+            sendResponse(client_fd, response.str());
+            close(client_fd);
+            return;
+        }
+    }
+
     // Utiliser resolvePath pour obtenir le chemin réel
     std::string resolvedPath = resolvePath(server, path);
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
@@ -255,7 +306,7 @@ void EpollClasse::handleRequest(int client_fd)
         }
         else
         {
-            // Méthode non supportée
+            // Méthode non supportée (ne devrait plus arriver)
             std::string errorContent = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
             std::string response = "HTTP/1.1 405 Method Not Allowed\r\n"
                                 "Content-Type: text/html\r\n"
@@ -294,104 +345,6 @@ void EpollClasse::sendResponse(int client_fd, const std::string &response)
         }
         total_sent += sent;
     }
-}
-
-void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server)
-{
-    // Vérifier si le fichier existe
-    struct stat file_stat;
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
-    
-    if (::stat(filePath.c_str(), &file_stat) == 0)
-    {
-        if (S_ISDIR(file_stat.st_mode))
-        {
-            // Si c'est un répertoire, vérifier l'autoindex
-            bool autoindex = false;
-            for (std::vector<Location>::const_iterator it = server.locations.begin();
-                 it != server.locations.end(); ++it)
-            {
-                if (filePath.find(it->path) == 0)
-                {
-                    autoindex = it->autoindex;
-                    break;
-                }
-            }
-
-            if (autoindex)
-            {
-                std::string content = AutoIndex::generateAutoIndexPage(filePath);
-                std::string response = "HTTP/1.1 200 OK\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                     content;
-                sendResponse(client_fd, response);
-            }
-            else
-            {
-                // Essayer d'utiliser le fichier index
-                std::string indexPath = filePath;
-                if (indexPath[indexPath.length() - 1] != '/')
-                    indexPath += "/";
-                indexPath += server.index;
-                
-                std::ifstream indexFile(indexPath.c_str(), std::ios::binary);
-                if (indexFile)
-                {
-                    std::string content((std::istreambuf_iterator<char>(indexFile)),
-                                       std::istreambuf_iterator<char>());
-                    std::string response = "HTTP/1.1 200 OK\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                         content;
-                    sendResponse(client_fd, response);
-                }
-                else
-                {
-                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
-                    std::string response = "HTTP/1.1 403 Forbidden\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                         errorContent;
-                    sendResponse(client_fd, response);
-                }
-            }
-        }
-        else
-        {
-            // C'est un fichier normal, le lire et l'envoyer
-            std::ifstream file(filePath.c_str(), std::ios::binary);
-            if (file)
-            {
-                std::string content((std::istreambuf_iterator<char>(file)),
-                                   std::istreambuf_iterator<char>());
-                std::string response = "HTTP/1.1 200 OK\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                     content;
-                sendResponse(client_fd, response);
-            }
-            else
-            {
-                std::string errorContent = ErreurDansTaGrosseDaronne(404);
-                std::string response = "HTTP/1.1 404 Not Found\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                     errorContent;
-                sendResponse(client_fd, response);
-            }
-        }
-    }
-    else
-    {
-        std::string errorContent = ErreurDansTaGrosseDaronne(404);
-        std::string response = "HTTP/1.1 404 Not Found\r\n"
-                             "Content-Type: text/html\r\n"
-                             "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                             errorContent;
-        sendResponse(client_fd, response);
-    }
-    close(client_fd);
 }
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
@@ -474,15 +427,121 @@ void EpollClasse::setNonBlocking(int fd)
     }
 }
 
-/*
-Modification wsh:
-    - gestion des chemins "dynamique" Methode resolvePath utilise les parametres root et index pour construire le chemin
-    complet.
-
-    - Support les serveurs multiples, les configurations des serveurs sont stockees dans _serverConfigs comme simon
-    me la gentillement propose
-
-    - Verification des erreurs pour toutes les operations CRITIQUES!!!
-
-    - Autoindex mtn je peut integrer AutoIndex::generateAutoIndexPage pour generer une page d'index si necessaire.
-*/
+void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server)
+{
+    struct stat file_stat;
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
+    if (::stat(filePath.c_str(), &file_stat) == 0)
+    {
+        if (S_ISDIR(file_stat.st_mode))
+        {
+            // Chercher le fichier index dans le dossier
+            std::string indexFile = server.index.empty() ? "index.html" : server.index;
+            std::string indexPath = filePath;
+            if (indexPath[indexPath.length() - 1] != '/')
+                indexPath += "/";
+            indexPath += indexFile;
+            struct stat index_stat;
+            if (::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode))
+            {
+                // Fichier index trouvé, le servir
+                std::ifstream file(indexPath.c_str(), std::ios::binary);
+                if (file)
+                {
+                    std::string content((std::istreambuf_iterator<char>(file)),
+                                       std::istreambuf_iterator<char>());
+                    std::string response = "HTTP/1.1 200 OK\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
+                                         content;
+                    sendResponse(client_fd, response);
+                }
+                else
+                {
+                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                    std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
+                                         errorContent;
+                    sendResponse(client_fd, response);
+                }
+            }
+            else
+            {
+                // Pas de fichier index, vérifier autoindex
+                bool autoindex = false;
+                for (std::vector<Location>::const_iterator it = server.locations.begin();
+                     it != server.locations.end(); ++it)
+                {
+                    if (filePath.find(it->path) == 0)
+                    {
+                        autoindex = it->autoindex;
+                        break;
+                    }
+                }
+                if (autoindex)
+                {
+                    std::string content = AutoIndex::generateAutoIndexPage(filePath);
+                    std::string response = "HTTP/1.1 200 OK\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
+                                         content;
+                    sendResponse(client_fd, response);
+                }
+                else
+                {
+                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                    std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
+                                         errorContent;
+                    sendResponse(client_fd, response);
+                }
+            }
+        }
+        else if (S_ISREG(file_stat.st_mode))
+        {
+            // C'est un fichier normal, le lire et l'envoyer
+            std::ifstream file(filePath.c_str(), std::ios::binary);
+            if (file)
+            {
+                std::string content((std::istreambuf_iterator<char>(file)),
+                                   std::istreambuf_iterator<char>());
+                std::string response = "HTTP/1.1 200 OK\r\n"
+                                     "Content-Type: text/html\r\n"
+                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
+                                     content;
+                sendResponse(client_fd, response);
+            }
+            else
+            {
+                std::string errorContent = ErreurDansTaGrosseDaronne(404);
+                std::string response = "HTTP/1.1 404 Not Found\r\n"
+                                     "Content-Type: text/html\r\n"
+                                     "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
+                                     errorContent;
+                sendResponse(client_fd, response);
+            }
+        }
+        else
+        {
+            // Ni fichier ni dossier
+            std::string errorContent = ErreurDansTaGrosseDaronne(404);
+            std::string response = "HTTP/1.1 404 Not Found\r\n"
+                                 "Content-Type: text/html\r\n"
+                                 "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
+                                 errorContent;
+            sendResponse(client_fd, response);
+        }
+    }
+    else
+    {
+        std::string errorContent = ErreurDansTaGrosseDaronne(404);
+        std::string response = "HTTP/1.1 404 Not Found\r\n"
+                             "Content-Type: text/html\r\n"
+                             "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
+                             errorContent;
+        sendResponse(client_fd, response);
+    }
+    close(client_fd);
+}
