@@ -119,7 +119,7 @@ test=fragment
 &emsp; . et que la reponse HTTP et correcte meme si elle arrive ne plusieurs morceaux.
 
 
-pas faire les tests du haut c de la merde faire ca c plus mieux
+pas faire es test du haut c de la merde faire ca c plus mieux
 ```sh
 import socket
 s = socket.socket()
