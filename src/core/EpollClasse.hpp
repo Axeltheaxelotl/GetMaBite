@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include "../serverConfig/ServerConfig.hpp"
 #include "../config/Server.hpp"
+#include "../http/RequestBufferManager.hpp"
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096
@@ -22,6 +23,7 @@ private:
     std::vector<ServerConfig> _servers;
     std::vector<Server> _serverConfigs;  // C'est la config qui contient root, index, etc.
     epoll_event _events[MAX_EVENTS];
+    RequestBufferManager _bufferManager;
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);

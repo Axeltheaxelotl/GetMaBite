@@ -73,9 +73,45 @@ server {
 - [ ] Comparaison du comportement avec NGINX
 
 ### Bonus
-- [ ] Support cookies et gestion de session
-- [ ] Support de plusieurs CGI
+&emsp;- [ ] Support cookies et gestion de session
+&emsp;- [ ] Support de plusieurs CGI
 
 ## Contributeur
 
 Le fils de pute de Simon
+
+## Test
+
+tests pour la Gestion des fragments de requêtes HTTP
+
+**commande :**
+  ```sh
+  curl -v http://localhost:8081
+  ```
+  
+  &emsp;. **But :** Tester une requete GET simple<br>
+  &emsp;. Il envoie une requete HTTP complete (EN UN SEULE MORCEAU) puis affiche la reponse recue.
+
+**Commande :**
+```sh
+curl -v -d "test=fragment" http://localhost:8081/
+```
+
+  &emsp;. **But :** Tester une requête POST avec un body.<br>
+  &emsp;. Il envoie une requête HTTP POST avec le body "test=fragment" et l’en-tête Content-Length adapté.
+
+**Commande :**
+```sh
+nc localhost 8081
+```
+
+&emsp;. **But :** Simuler une connexion TCP "manuelle" pour envoyer une requête HTTP en plusieurs fragments.
+&emsp; tapes les commandes une par une exemple:
+```sh
+POST / HTTP/1.1
+Host: localhost:8081
+Content-Length: 11
+
+test=fragment
+```
+

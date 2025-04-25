@@ -8,6 +8,7 @@
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
 #include "../utils/Utils.hpp"
+#include "../http/RequestBufferManager.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -213,17 +214,23 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 void EpollClasse::handleRequest(int client_fd)
 {
     char buffer[BUFFER_SIZE];
-    std::string request;
-    
     int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
     if (bytes_read <= 0)
     {
         close(client_fd);
+        _bufferManager.remove(client_fd);
+        return;
+    }
+    buffer[bytes_read] = '\0';
+    _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+
+    if (!_bufferManager.isRequestComplete(client_fd)) {
+        // Attendre la suite de la requête
         return;
     }
 
-    buffer[bytes_read] = '\0';
-    request = buffer;
+    std::string request = _bufferManager.get(client_fd);
+    _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP
     std::string method, path, protocol;

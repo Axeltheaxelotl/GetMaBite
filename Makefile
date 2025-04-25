@@ -28,7 +28,8 @@ SRCS      = src/main.cpp \
             src/utils/Logger.cpp \
             src/routes/RouteHandler.cpp \
             src/routes/RedirectionHandler.cpp \
-            src/routes/AutoIndex.cpp
+            src/routes/AutoIndex.cpp \
+			src/http/RequestBufferManager.cpp \
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
