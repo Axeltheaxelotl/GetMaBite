@@ -293,6 +293,41 @@ void EpollClasse::handleRequest(int client_fd)
             return;
         }
     }
+    else
+    {
+        // Si aucune location ne matche, vérifier allow_methods du server (ou GET par défaut)
+        bool allowed = false;
+        if (!server.locations.empty()) {
+            // Si le server a une location "/", on peut utiliser ses allow_methods
+            for (size_t i = 0; i < server.locations.size(); ++i) {
+                if (server.locations[i].path == "/") {
+                    for (size_t j = 0; j < server.locations[i].allow_methods.size(); ++j) {
+                        if (server.locations[i].allow_methods[j] == method) {
+                            allowed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Si pas de location /, GET seulement autorisé par défaut
+        if (!allowed && method == "GET")
+            allowed = true;
+        if (!allowed) {
+            std::string allowHeader = "Allow: GET";
+            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+            std::ostringstream response;
+            response << "HTTP/1.1 405 Method Not Allowed\r\n"
+                     << allowHeader << "\r\n"
+                     << "Content-Type: text/html\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "\r\n"
+                     << body;
+            sendResponse(client_fd, response.str());
+            close(client_fd);
+            return;
+        }
+    }
 
     // Utiliser resolvePath pour obtenir le chemin réel
     std::string resolvedPath = resolvePath(server, path);
@@ -303,9 +338,9 @@ void EpollClasse::handleRequest(int client_fd)
     if (::stat(resolvedPath.c_str(), &file_stat) == 0)
     {
         // Le fichier existe, on le traite selon la méthode
-        if (method == "GET")
+        if (method == "GET" || method == "HEAD")
         {
-            handleGetRequest(client_fd, resolvedPath, server);
+            handleGetRequest(client_fd, resolvedPath, server, method == "HEAD");
         }
         else if (method == "POST")
         {
@@ -420,7 +455,7 @@ void EpollClasse::setNonBlocking(int fd)
     }
 }
 
-void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server)
+void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead)
 {
     struct stat file_stat;
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
@@ -445,8 +480,9 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
                                        std::istreambuf_iterator<char>());
                     std::string response = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                         content;
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                    if (!isHead)
+                        response += content;
                     sendResponse(client_fd, response);
                 }
                 else
@@ -477,8 +513,9 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
                     std::string content = AutoIndex::generateAutoIndexPage(filePath);
                     std::string response = "HTTP/1.1 200 OK\r\n"
                                          "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                         content;
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                    if (!isHead)
+                        response += content;
                     sendResponse(client_fd, response);
                 }
                 else
@@ -502,8 +539,9 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
                                    std::istreambuf_iterator<char>());
                 std::string response = "HTTP/1.1 200 OK\r\n"
                                      "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n" + 
-                                     content;
+                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                if (!isHead)
+                    response += content;
                 sendResponse(client_fd, response);
             }
             else

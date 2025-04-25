@@ -66,7 +66,7 @@ server {
 - [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
 - [x] Gestion correcte des fragments de requêtes HTTP
 - [ ] Gestion stricte C++98
-- [ ] Gestion des pages d’erreur personnalisées
+- [x] Gestion des pages d’erreur personnalisées
 - [ ] Support de plusieurs server_name par serveur
 - [ ] Gestion stricte des allow_methods par location
 - [ ] Stress tests et robustesse
