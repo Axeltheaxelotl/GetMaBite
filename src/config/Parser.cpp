@@ -183,6 +183,10 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			}
 			std::string param;
 			iss >> param;
+
+			if (!param.empty() && param[param.size() - 1] == ';')
+    			param.erase(param.size() - 1);
+
 			port = 0;
 			colonPos = param.find(':');
 			if(colonPos != std::string::npos)
