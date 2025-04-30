@@ -68,7 +68,7 @@ server {
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
 - [ ] Support de plusieurs server_name par serveur
-- [ ] Gestion stricte des allow_methods par location
+- [x] Gestion stricte des allow_methods par location
 - [ ] Stress tests et robustesse
 - [ ] Comparaison du comportement avec NGINX
 
