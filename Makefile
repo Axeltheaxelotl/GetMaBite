@@ -30,6 +30,8 @@ SRCS      = src/main.cpp \
             src/routes/RedirectionHandler.cpp \
             src/routes/AutoIndex.cpp \
 			src/http/RequestBufferManager.cpp \
+			src/bonus_cookie/CookieManager.cpp \
+			src/bonus_cookie/ParseCookie.cpp \
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 

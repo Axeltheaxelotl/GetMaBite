@@ -73,7 +73,7 @@ server {
 - [ ] Comparaison du comportement avec NGINX
 
 ### Bonus
-&emsp;- [ ] Support cookies et gestion de session
+&emsp;- [inshalla g mal a la tete ez] Support cookies et gestion de session
 &emsp;- [ ] Support de plusieurs CGI
 
 ## Contributeur

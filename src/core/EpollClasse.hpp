@@ -34,7 +34,7 @@ private:
     std::string resolvePath(const Server &server, const std::string &requestedPath);
     
     // Méthodes de gestion des requêtes HTTP
-    void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead);
+    void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies);
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);

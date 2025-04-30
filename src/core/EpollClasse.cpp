@@ -9,6 +9,7 @@
 #include "../routes/AutoIndex.hpp"
 #include "../utils/Utils.hpp"
 #include "../http/RequestBufferManager.hpp"
+#include "../bonus_cookie/CookieManager.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -244,6 +245,18 @@ void EpollClasse::handleRequest(int client_fd)
     if (path.empty())
         path = "/";
 
+    // Extraction des headers pour trouver Cookie
+    std::string line;
+    std::map<std::string, std::string> cookies;
+    while (std::getline(requestStream, line) && line != "\r") {
+        if (line.find("Cookie:") == 0) {
+            std::string cookieHeader = line.substr(7); // après "Cookie:"
+            // Trim
+            while (!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
+            cookies = CookieManager::parseCookies(cookieHeader);
+        }
+    }
+
     // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
     const Server& server = _serverConfigs[0];
 
@@ -340,7 +353,8 @@ void EpollClasse::handleRequest(int client_fd)
         // Le fichier existe, on le traite selon la méthode
         if (method == "GET" || method == "HEAD")
         {
-            handleGetRequest(client_fd, resolvedPath, server, method == "HEAD");
+            // Passer cookies à handleGetRequest (à modifier dans la signature)
+            handleGetRequest(client_fd, resolvedPath, server, method == "HEAD", cookies);
         }
         else if (method == "POST")
         {
@@ -455,15 +469,26 @@ void EpollClasse::setNonBlocking(int fd)
     }
 }
 
-void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead)
+void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies)
 {
     struct stat file_stat;
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
+    // Exemple de gestion d'un cookie de compteur de visites
+    int visit_count = 1;
+    std::map<std::string, std::string>::const_iterator it = cookies.find("visit_count");
+    if (it != cookies.end()) {
+        visit_count = atoi(it->second.c_str());
+        if (visit_count < 1) visit_count = 1;
+        visit_count++;
+    }
+    std::ostringstream oss;
+    oss << visit_count;
+    std::string setCookieHeader = CookieManager::createSetCookieHeader("visit_count", oss.str(), 3600, "/");
+
     if (::stat(filePath.c_str(), &file_stat) == 0)
     {
         if (S_ISDIR(file_stat.st_mode))
         {
-            // Chercher le fichier index dans le dossier
             std::string indexFile = server.index.empty() ? "index.html" : server.index;
             std::string indexPath = filePath;
             if (indexPath[indexPath.length() - 1] != '/')
@@ -472,26 +497,28 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
             struct stat index_stat;
             if (::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode))
             {
-                // Fichier index trouvé, le servir
                 std::ifstream file(indexPath.c_str(), std::ios::binary);
                 if (file)
                 {
                     std::string content((std::istreambuf_iterator<char>(file)),
                                        std::istreambuf_iterator<char>());
-                    std::string response = "HTTP/1.1 200 OK\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                    std::ostringstream response;
+                    response << "HTTP/1.1 200 OK\r\n"
+                             << setCookieHeader << "\r\n"
+                             << "Content-Type: text/html\r\n"
+                             << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
                     if (!isHead)
-                        response += content;
-                    sendResponse(client_fd, response);
+                        response << content;
+                    sendResponse(client_fd, response.str());
                 }
                 else
                 {
                     std::string errorContent = ErreurDansTaGrosseDaronne(403);
                     std::string response = "HTTP/1.1 403 Forbidden\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                         errorContent;
+                                         + setCookieHeader + "\r\n"
+                                         + "Content-Type: text/html\r\n"
+                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                         + errorContent;
                     sendResponse(client_fd, response);
                 }
             }
@@ -522,9 +549,10 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
                 {
                     std::string errorContent = ErreurDansTaGrosseDaronne(403);
                     std::string response = "HTTP/1.1 403 Forbidden\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                         errorContent;
+                                         + setCookieHeader + "\r\n"
+                                         + "Content-Type: text/html\r\n"
+                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                         + errorContent;
                     sendResponse(client_fd, response);
                 }
             }
@@ -537,20 +565,23 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
             {
                 std::string content((std::istreambuf_iterator<char>(file)),
                                    std::istreambuf_iterator<char>());
-                std::string response = "HTTP/1.1 200 OK\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                std::ostringstream response;
+                response << "HTTP/1.1 200 OK\r\n"
+                         << setCookieHeader << "\r\n"
+                         << "Content-Type: text/html\r\n"
+                         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
                 if (!isHead)
-                    response += content;
-                sendResponse(client_fd, response);
+                    response << content;
+                sendResponse(client_fd, response.str());
             }
             else
             {
-                std::string errorContent = ErreurDansTaGrosseDaronne(404);
-                std::string response = "HTTP/1.1 404 Not Found\r\n"
-                                     "Content-Type: text/html\r\n"
-                                     "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                     errorContent;
+                std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                     + setCookieHeader + "\r\n"
+                                     + "Content-Type: text/html\r\n"
+                                     + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                     + errorContent;
                 sendResponse(client_fd, response);
             }
         }
@@ -559,9 +590,10 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
             // Ni fichier ni dossier
             std::string errorContent = ErreurDansTaGrosseDaronne(404);
             std::string response = "HTTP/1.1 404 Not Found\r\n"
-                                 "Content-Type: text/html\r\n"
-                                 "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                                 errorContent;
+                                 + setCookieHeader + "\r\n"
+                                 + "Content-Type: text/html\r\n"
+                                 + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                 + errorContent;
             sendResponse(client_fd, response);
         }
     }
@@ -569,9 +601,10 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
     {
         std::string errorContent = ErreurDansTaGrosseDaronne(404);
         std::string response = "HTTP/1.1 404 Not Found\r\n"
-                             "Content-Type: text/html\r\n"
-                             "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n" +
-                             errorContent;
+                             + setCookieHeader + "\r\n"
+                             + "Content-Type: text/html\r\n"
+                             + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                             + errorContent;
         sendResponse(client_fd, response);
     }
     close(client_fd);
