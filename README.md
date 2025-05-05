@@ -63,11 +63,11 @@ server {
 - [x] Upload de fichiers
 - [x] Suppression de fichiers (DELETE)
 - [x] Gestion des redirections HTTP
-- [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
+- [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement) simon si tu voit ca bouge toi le huk
 - [x] Gestion correcte des fragments de requêtes HTTP
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
-- [ ] Support de plusieurs server_name par serveur
+- [ ] Support de plusieurs server_name par serveur (j'ai vraiment la flemme de faire ca)
 - [x] Gestion stricte des allow_methods par location
 - [ ] Stress tests et robustesse
 - [ ] Comparaison du comportement avec NGINX
