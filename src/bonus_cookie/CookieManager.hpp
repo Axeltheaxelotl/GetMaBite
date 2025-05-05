@@ -14,3 +14,5 @@ public:
 };
 
 #endif // COOKIE_MANAGER_HPP
+
+
