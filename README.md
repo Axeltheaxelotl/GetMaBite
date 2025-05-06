@@ -59,18 +59,20 @@ server {
 - [x] Gestion des routes, root, index, alias
 - [x] Listing de répertoire (autoindex)
 - [x] Pages d’erreur par défaut
-- [x] Limitation de la taille du body client
+- [x] Limitation de la taille du body client (verfier qu il refuses bien les bodies trop gros avec erreur 413)
 - [x] Upload de fichiers
 - [x] Suppression de fichiers (DELETE)
 - [x] Gestion des redirections HTTP
 - [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement) simon si tu voit ca bouge toi le huk
-- [x] Gestion correcte des fragments de requêtes HTTP
+- [x] Gestion correcte des fragments de requêtes HTTP (a verifier mais normalement ok RequestBufferManager)
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
 - [ ] Support de plusieurs server_name par serveur (j'ai vraiment la flemme de faire ca)
 - [x] Gestion stricte des allow_methods par location
-- [ ] Stress tests et robustesse
-- [ ] Comparaison du comportement avec NGINX
+- [ ] Stress tests et robustesse (a faire pour tester si il ne crash pas)
+- [ ] Comparaison du comportement avec NGINX (pour comparer les headers, codes d etat, la gestion des erreurs, etc...)
+- [ ] Gestion du timeout (pour le timeout sur les connexions)
+- [ ] uploads multipart/form-data (POST) juste ecrit le body dans un fichier sans parser "Sans parser le multipart"
 
 ### Bonus
 &emsp;- [inshalla g mal a la tete ez] Support cookies et gestion de session
@@ -129,3 +131,39 @@ s.send(b"test=fragment")
 print(s.recv(4096).decode())
 s.close()
 ```
+
+---
+
+<p align="left">
+  <h3><b>- Descripteur de fichier</b></h3><br>
+  Un descripteur de fichier (FD) c juste un nombre entier qui identifie une ressource ouverte par un programme :<br>
+  un fichier, un socket reseau, etc...<br>
+  Ex: quand tu ouvres un socket, le systeme te donne un FD (ex: 4)<br><br>
+
+  <h3><b>- A quoi sert epoll</b></h3><br>
+  epoll permet a un serveur de surveiller plein de descripteurs de fihciers en meme temps, pour savoir quand il y a<br>
+  quelque chose a lire ou a ecrire dessus, sans gaspiller de ressources.<br><br>
+
+  <h3><b>- J a vais le faire marcher mtn inschallah</b></h3><br>
+  <b>1. Cree une instance epoll</b><br>
+  
+  ```sh
+  int epoll_fd = epoll_create1(0);
+  ```
+  <b>2. Ajouter les sockets a surveiller</b><br>
+  Pour chaque sockets (serveur ou client), tu l'ajoutes a epoll:<br>
+  ```sh
+  epoll_event envent;
+  event.envents = EPOLLIN; // On veut savoir quand il y a des donnees a lire
+  event.data.fd = socket_fd;
+  epoll_ctl(epoll_fd, EPOLL_CTL_ADD, socket_fd, &event);
+  ```
+  <b>3. Attendre les evenements</b><br>
+  ```sh
+  int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+  ```
+  quand un evenement arrive (ex: un client envoie des donnees), epoll te dit quel FD agir.<br>
+
+  <b>4. Traiter l'evenement</b><br>
+  - Si c'est un nouveau socket serveur: accepte une nouvelle connexion.<br>
+  - Si c'est un client: lire ou ecrire les donnees.<br>
