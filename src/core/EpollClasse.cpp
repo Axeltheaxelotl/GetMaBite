@@ -32,7 +32,7 @@ static std::string joinPath(const std::string& left, const std::string& right) {
 
 // Utilitaire pour éviter le doublon de dossier (ex: /tests/tests/)
 static std::string smartJoinRootAndPath(const std::string& root, const std::string& path) {
-    // Nettoie les slashes
+    // netoie les slashes
     std::string cleanRoot = root;
     if (!cleanRoot.empty() && cleanRoot[cleanRoot.size() - 1] == '/')
         cleanRoot = cleanRoot.substr(0, cleanRoot.size() - 1);
