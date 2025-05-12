@@ -638,4 +638,4 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
              << "Content-Length: " << body.size() << "\r\n\r\n"
              << body;
     sendResponse(client_fd, response.str());
-}
+}\

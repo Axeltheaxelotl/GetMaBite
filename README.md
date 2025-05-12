@@ -167,3 +167,76 @@ s.close()
   <b>4. Traiter l'evenement</b><br>
   - Si c'est un nouveau socket serveur: accepte une nouvelle connexion.<br>
   - Si c'est un client: lire ou ecrire les donnees.<br>
+
+---
+
+
+  <p align="center">
+    <h3><b>- Schéma de fonctionnement du serveur epoll</b></h3>
+  </p>
+
+  ```plaintext
+  +-------------------+
+  |   Démarrage       |
+  +-------------------+
+           |
+           v
+  +-------------------+
+  |  epoll_create1()  |
+  +-------------------+
+           |
+           v
+  +-----------------------------+
+  |  Création sockets serveurs  |
+  +-----------------------------+
+           |
+           v
+  +-----------------------------+
+  |  Ajout sockets serveurs à   |
+  |        epoll (EPOLLIN)      |
+  +-----------------------------+
+           |
+           v
+  +-----------------------------+
+  |      Boucle principale      |
+  |      while (1)              |
+  |   epoll_wait(...)           |
+  +-----------------------------+
+           |
+           v
+  +-----------------------------+
+  | Pour chaque événement :     |
+  +-----------------------------+
+           |
+           v
+     +-------------------+      +-------------------+
+     | FD = serveur ?    |----->|  accept()         |
+     +-------------------+      +-------------------+
+           |                           |
+           | Non                       v
+           v                   +-------------------+
+  +-------------------+        | Ajout client FD   |
+  | FD = client ?     |------->| à epoll (EPOLLIN) |
+  +-------------------+        +-------------------+
+           |
+           v
+  +-------------------+
+  |  handleRequest()  |
+  |  (lecture req)    |
+  +-------------------+
+           |
+           v
+  +-------------------+
+  |  Générer réponse  |
+  +-------------------+
+           |
+           v
+  +-------------------+
+  |  sendResponse()   |
+  +-------------------+
+           |
+           v
+  +-------------------+
+  |  close(client_fd) |
+  +-------------------+
+  ```
