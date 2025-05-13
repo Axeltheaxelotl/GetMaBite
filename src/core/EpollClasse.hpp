@@ -21,7 +21,7 @@ private:
     int _epoll_fd;
     int _biggest_fd;
     std::vector<ServerConfig> _servers;
-    std::vector<Server> _serverConfigs;  // C'est la config qui contient root, index, etc.
+    std::vector<Server> _serverConfigs;  // Stores the server configurations
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
 
@@ -39,6 +39,9 @@ private:
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);
     void sendErrorResponse(int client_fd, int code, const Server& server);
+
+    // Finds the matching server based on host and port
+    int findMatchingServer(const std::string& host, int port);
 
 public:
     EpollClasse();

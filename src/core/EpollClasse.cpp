@@ -5,11 +5,13 @@
 #include <cstring>
 #include <sstream>
 #include <sys/stat.h>
+#include <algorithm> // Ensure std::find is available
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
 #include "../utils/Utils.hpp"
 #include "../http/RequestBufferManager.hpp"
 #include "../bonus_cookie/CookieManager.hpp"
+#include "../config/ServerNameHandler.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -142,16 +144,26 @@ void EpollClasse::addToEpoll(int fd, epoll_event &event)
 }
 
 // Vérifier si le FD est un serveur
-bool EpollClasse::isServerFd(int fd)
-{
-    for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
-    {
-        if (it->getFd() == fd)
-        {
+bool EpollClasse::isServerFd(int fd) {
+    for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it) {
+        if (fd == it->getFd()) {
             return true;
         }
     }
     return false;
+}
+
+int EpollClasse::findMatchingServer(const std::string& host, int port) {
+    for (size_t i = 0; i < _serverConfigs.size(); ++i) {
+        const Server& server = _serverConfigs[i];
+        // Ensure the type of listen_ports matches std::find's requirements
+        if (std::find(server.listen_ports.begin(), server.listen_ports.end(), port) != server.listen_ports.end()) {
+            if (ServerNameHandler::isServerNameMatch(server.server_names, host)) {
+                return i;
+            }
+        }
+    }
+    return -1; // No matching server found
 }
 
 // Accepter une connexion
@@ -638,4 +650,4 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
              << "Content-Length: " << body.size() << "\r\n\r\n"
              << body;
     sendResponse(client_fd, response.str());
-}\
+}

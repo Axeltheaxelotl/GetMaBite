@@ -23,6 +23,14 @@ Webserv est un projet de serveur HTTP développé en C++98, inspiré du fonction
 - Pages d'erreur personnalisées
 - Redirections HTTP
 
+## Explication de non bloquant pour les gogols
+
+le mode non bloquant c se qui permet a un programme de ne jamais rester "bloquee mdr" en attende de lors d'une operation d'entree/sortie (I/O) comme read(),<br>
+write(), accept().<br>
+Au lieu d'attendre qu'une donnee arrive (ce qui peut prendre du "temps"), la fonction retourne tout de suite:<br>
+&emsp; . Si l'operation  peut etre faite, elle reussit normalement.<br>
+&emsp; . Si ce n'est pas possible (ex: bas rien), elle retourne une erreur speciale (EGAIN ou EWOULDBLOCK).<br>
+
 ## Installation et compilation
 
 ```sh

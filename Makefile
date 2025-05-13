@@ -22,6 +22,7 @@ SRCS      = src/main.cpp \
             src/config/Parser.cpp \
             src/config/Location.cpp \
             src/config/Server.cpp \
+            src/config/ServerNameHandler.cpp \
             src/core/EpollClasse.cpp \
             src/serverConfig/ServerConfig.cpp \
             src/utils/Utils.cpp \

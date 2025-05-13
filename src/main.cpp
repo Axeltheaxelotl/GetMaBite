@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     {
         std::string host = "0.0.0.0"; // Valeur par défaut
         if (!it->server_names.empty())
-   ++-*/9/9-**-     {
+        {
             host = it->server_names[0]; // Utilise le premier nom de serveur comme host
         }
         
