@@ -270,5 +270,82 @@ s.close()
   &emsp; personnalisees sont servies correctement.
   </p>
   <p>
-  <b>5.Timeouts:<b><br>
+  <b>5.Timeouts:</b><br>
   &emsp; *Implementation d une gestion de timeouts pour les connexions inactives.
+
+
+---
+
+
+  <h2>Points intégrés et améliorations possibles</h2>
+  <p>
+  <b>Ce qui est déjà intégré :</b><br>
+  1. <u>Gestion des méthodes HTTP</u> :<br>
+    &emsp; - Méthodes supportées : `GET`, `POST`, `DELETE`.<br>
+
+  2. <u>Gestion des routes et des fichiers</u> :<br>
+    &emsp; - Gestion des routes, `root`, `index`, et `alias`.<br>
+    &emsp; - Listing de répertoire (`autoindex`).<br>
+    &emsp; - Upload et suppression de fichiers.<br>
+
+  3. <u>Pages d'erreur personnalisées</u> :<br>
+    &emsp; - Pages d'erreur pour les codes HTTP comme 400, 401, 403, 404, 500.<br>
+
+  4. <u>Limitation de la taille du body client</u> :<br>
+    &emsp; - Vérification et rejet des bodies trop gros avec une erreur 413.<br>
+
+  5. <u>Gestion des fragments de requêtes HTTP</u> :<br>
+    &emsp; - Utilisation de `RequestBufferManager` pour gérer les requêtes fragmentées.<br>
+
+  6. <u>Redirections HTTP</u> :<br>
+    &emsp; - Gestion des redirections via des codes comme 301 ou 302.<br>
+
+  7. <u>Support des `server_name`</u> :<br>
+    &emsp; - Gestion de plusieurs `server_name` par serveur.<br>
+
+  8. <u>Stress tests et robustesse</u> :<br>
+    &emsp; - Tests pour vérifier la stabilité sous forte charge ou avec des requêtes malformées.<br>
+  </p>
+  <p>
+  <b>Ce que vous pourriez ajouter :</b><br>
+  1. <u>Gestion stricte des headers HTTP</u> :<br>
+    &emsp; - Vérification de la conformité des headers avec la RFC 7230.<br>
+    &emsp; - Validation des headers obligatoires comme `Host` et gestion des headers optionnels.<br>
+
+  2. <u>Support des cookies et gestion de session</u> :<br>
+    &emsp; - Implémentation d'un gestionnaire de cookies pour lire, écrire et supprimer des cookies.<br>
+
+  3. <u>Gestion stricte des timeouts</u> :<br>
+    &emsp; - Déconnexion des connexions inactives après un certain délai.<br>
+
+  4. <u>Support des requêtes multipart/form-data</u> :<br>
+    &emsp; - Parsing des requêtes multipart pour gérer les uploads de fichiers complexes.<br>
+
+  5. <u>Comparaison avec NGINX</u> :<br>
+    &emsp; - Vérification des headers, des codes d'état, et des comportements pour s'assurer de la conformité.<br>
+
+  6. <u>Gestion des connexions persistantes</u> :<br>
+    &emsp; - Implémentation de `Connection: keep-alive` pour réutiliser les connexions.<br>
+
+  7. <u>Support des encodages</u> :<br>
+    &emsp; - Gestion des encodages comme `gzip` ou `chunked`.<br>
+
+  8. <u>Gestion des méthodes HTTP supplémentaires</u> :<br>
+    &emsp; - Ajout de méthodes comme `PUT`, `HEAD`, ou `OPTIONS`.<br>
+
+  9. <u>Amélioration des logs</u> :<br>
+    &emsp; - Ajout de logs détaillés pour les requêtes et réponses HTTP.<br>
+
+  10. <u>Gestion des erreurs HTTP supplémentaires</u> :<br>
+    &emsp; - Implémentation de codes d'erreur comme 405 (Method Not Allowed) ou 501 (Not Implemented).<br>
+  </p>
+
+### Qu'est-ce que la RFC ?
+
+La RFC (Request for Comments) est une série de documents techniques et organisationnels publiés par l'IETF (Internet Engineering Task Force). Ces documents définissent les standards et protocoles utilisés sur Internet, comme HTTP, TCP/IP, ou encore DNS. Chaque RFC est numérotée et sert de référence pour les développeurs et ingénieurs.
+
+#### À quoi sert la RFC dans Webserv ?
+Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est utilisée pour garantir que le serveur respecte les standards du protocole HTTP. Cela permet :
+- Une compatibilité avec les navigateurs et clients HTTP.
+- Une gestion correcte des requêtes et réponses HTTP.
+- Une conformité aux bonnes pratiques pour éviter des comportements imprévus.
