@@ -75,7 +75,7 @@ server {
 - [x] Gestion correcte des fragments de requêtes HTTP (a verifier mais normalement ok RequestBufferManager)
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
-- [ ] Support de plusieurs server_name par serveur (j'ai vraiment la flemme de faire ca)
+- [x] Support de plusieurs server_name par serveur (j'ai vraiment la flemme de faire ca) (a verifier)
 - [x] Gestion stricte des allow_methods par location
 - [ ] Stress tests et robustesse (a faire pour tester si il ne crash pas)
 - [ ] Comparaison du comportement avec NGINX (pour comparer les headers, codes d etat, la gestion des erreurs, etc...)
