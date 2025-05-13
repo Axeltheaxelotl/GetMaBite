@@ -97,45 +97,36 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vec
 }
 
 // Boucle principale
-void EpollClasse::serverRun()
-{
-    while (true)
-    {
-        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // 1-second timeout for epoll_wait
-        if (event_count == -1)
-        {
+void EpollClasse::serverRun() {
+    while (true) {
+        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // Timeout of 1 second
+        if (event_count == -1) {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll wait error: %s", strerror(errno));
             exit(EXIT_FAILURE);
         }
 
-        for (int i = 0; i < event_count; ++i)
-        {
-            if (_events[i].events & EPOLLIN)
-            {
-                if (isServerFd(_events[i].data.fd))
-                {
-                    acceptConnection(_events[i].data.fd);
+        for (int i = 0; i < event_count; ++i) {
+            int fd = _events[i].data.fd;
+
+            if (_events[i].events & EPOLLIN) {
+                if (isServerFd(fd)) {
+                    acceptConnection(fd);
+                } else {
+                    handleRequest(fd);
+                    timeoutManager.updateClientActivity(fd); // Update client activity
                 }
-                else
-                {
-                    timeoutManager.updateClientActivity(_events[i].data.fd);
-                    handleRequest(_events[i].data.fd);
-                }
-            }
-            else if (_events[i].events & (EPOLLERR | EPOLLHUP))
-            {
-                handleError(_events[i].data.fd);
+            } else if (_events[i].events & (EPOLLHUP | EPOLLERR)) {
+                handleError(fd);
             }
         }
 
         // Check for timed-out clients
-        for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it) {
-            int clientFd = it->getFd();
-            if (timeoutManager.isClientTimedOut(clientFd)) {
-                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d timed out", clientFd);
-                close(clientFd);
-                timeoutManager.removeClient(clientFd);
-            }
+        std::vector<int> timedOutClients = timeoutManager.getTimedOutClients();
+        for (std::vector<int>::iterator it = timedOutClients.begin(); it != timedOutClients.end(); ++it) {
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client %d timed out. Closing connection.", *it);
+            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL); // Remove client from epoll
+            close(*it);
+            timeoutManager.removeClient(*it); // Remove client from timeout manager
         }
     }
 }

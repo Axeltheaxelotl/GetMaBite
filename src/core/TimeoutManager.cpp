@@ -1,4 +1,6 @@
 #include "TimeoutManager.hpp"
+#include <ctime> // Added for time_t
+#include <vector>
 #include <sys/time.h>
 #include <cstddef> // Include for NULL
 #include <iostream> // For logging
@@ -6,9 +8,7 @@
 TimeoutManager::TimeoutManager(int timeoutSeconds) : _timeoutSeconds(timeoutSeconds) {}
 
 void TimeoutManager::addClient(int clientFd) {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    _clientTimeouts[clientFd] = now.tv_sec;
+    _clientTimeouts[clientFd] = time(NULL); // Use time(NULL) for current timestamp
 }
 
 void TimeoutManager::removeClient(int clientFd) {
@@ -16,20 +16,24 @@ void TimeoutManager::removeClient(int clientFd) {
 }
 
 bool TimeoutManager::isClientTimedOut(int clientFd) {
-    struct timeval now;
-    gettimeofday(&now, NULL);
+    time_t now = time(NULL);
     if (_clientTimeouts.find(clientFd) != _clientTimeouts.end()) {
-        long elapsed = now.tv_sec - _clientTimeouts[clientFd];
-        if (elapsed >= _timeoutSeconds) {
-            std::cout << "Client " << clientFd << " has been inactive for " << elapsed << " seconds. Timing out." << std::endl;
-            return true;
-        }
+        return (now - _clientTimeouts[clientFd]) >= _timeoutSeconds;
     }
     return false;
 }
 
 void TimeoutManager::updateClientActivity(int clientFd) {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    _clientTimeouts[clientFd] = now.tv_sec;
+    _clientTimeouts[clientFd] = time(NULL); // Update timestamp to current time
+}
+
+std::vector<int> TimeoutManager::getTimedOutClients() {
+    std::vector<int> timedOutClients;
+    time_t now = time(NULL);
+    for (std::map<int, time_t>::iterator it = _clientTimeouts.begin(); it != _clientTimeouts.end(); ++it) {
+        if ((now - it->second) >= _timeoutSeconds) {
+            timedOutClients.push_back(it->first);
+        }
+    }
+    return timedOutClients;
 }
