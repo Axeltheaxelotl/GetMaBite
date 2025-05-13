@@ -14,7 +14,7 @@ NAME      = webserv
 CXX       = clang++ 
 STD       = -std=c++98
 CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
-INCLUDES  = -Isrc -Isrc/serverConfig -Isrc/core -Isrc/config -Isrc/utils -Isrc/routes
+INCLUDES  = -Isrc -Isrc/serverConfig -Isrc/core -Isrc/config -Isrc/utils -Isrc/routes -I./src/core
 DEBUG_FLAGS = -O0 -g3 -flto $(STD)
 OBJ_DIR   = ./objs
 
@@ -24,6 +24,7 @@ SRCS      = src/main.cpp \
             src/config/Server.cpp \
             src/config/ServerNameHandler.cpp \
             src/core/EpollClasse.cpp \
+            src/core/TimeoutManager.cpp \
             src/serverConfig/ServerConfig.cpp \
             src/utils/Utils.cpp \
             src/utils/Logger.cpp \

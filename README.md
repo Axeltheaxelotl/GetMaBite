@@ -67,24 +67,25 @@ server {
 - [x] Gestion des routes, root, index, alias
 - [x] Listing de répertoire (autoindex)
 - [x] Pages d’erreur par défaut
-- [x] Limitation de la taille du body client (verfier qu il refuses bien les bodies trop gros avec erreur 413)
+- [x] Limitation de la taille du body client (vérifier qu’il refuse bien les bodies trop gros avec erreur 413)
 - [x] Upload de fichiers
 - [x] Suppression de fichiers (DELETE)
 - [x] Gestion des redirections HTTP
-- [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement) simon si tu voit ca bouge toi le huk
-- [x] Gestion correcte des fragments de requêtes HTTP (a verifier mais normalement ok RequestBufferManager)
+- [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
+- [x] Gestion correcte des fragments de requêtes HTTP (à vérifier mais normalement ok RequestBufferManager)
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
-- [x] Support de plusieurs server_name par serveur (j'ai vraiment la flemme de faire ca) (a verifier)
+- [x] Support complet des server_name par serveur (à vérifier avec des tests)
 - [x] Gestion stricte des allow_methods par location
-- [ ] Stress tests et robustesse (a faire pour tester si il ne crash pas)
-- [ ] Comparaison du comportement avec NGINX (pour comparer les headers, codes d etat, la gestion des erreurs, etc...)
-- [ ] Gestion du timeout (pour le timeout sur les connexions)
-- [ ] uploads multipart/form-data (POST) juste ecrit le body dans un fichier sans parser "Sans parser le multipart"
+- [ ] Stress tests et robustesse (tester si le serveur ne crash pas sous forte charge ou avec des requêtes malformées)
+- [ ] Comparaison avec NGINX (vérifier les headers, codes d’état, gestion des erreurs, etc.)
+- [ ] Gestion du timeout (pour les connexions inactives)
+- [ ] uploads multipart/form-data (POST) juste écrire le body dans un fichier sans parser "Sans parser le multipart"
 
-### Bonus
-&emsp;- [inshalla g mal a la tete ez] Support cookies et gestion de session
-&emsp;- [ ] Support de plusieurs CGI
+### Non explicitement demandés mais fortement recommandés
+
+- [ ] Gestion stricte des headers HTTP (conformité aux standards HTTP, RFC 7230)
+- [ ] Support des cookies et gestion de session (bonus)
 
 ## Contributeur
 

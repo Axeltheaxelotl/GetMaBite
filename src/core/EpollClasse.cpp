@@ -1,4 +1,5 @@
 #include "EpollClasse.hpp"
+#include "TimeoutManager.hpp"
 #include <cerrno>
 #include <cstdlib>
 #include <fstream>
@@ -50,7 +51,7 @@ static std::string smartJoinRootAndPath(const std::string& root, const std::stri
 }
 
 // Constructeur
-EpollClasse::EpollClasse()
+EpollClasse::EpollClasse() : timeoutManager(10) // Initialize TimeoutManager with a 60-second timeout
 {
     _epoll_fd = epoll_create1(0);
     if (_epoll_fd == -1)
@@ -100,7 +101,7 @@ void EpollClasse::serverRun()
 {
     while (true)
     {
-        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, -1);
+        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // 1-second timeout for epoll_wait
         if (event_count == -1)
         {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll wait error: %s", strerror(errno));
@@ -117,12 +118,23 @@ void EpollClasse::serverRun()
                 }
                 else
                 {
+                    timeoutManager.updateClientActivity(_events[i].data.fd);
                     handleRequest(_events[i].data.fd);
                 }
             }
             else if (_events[i].events & (EPOLLERR | EPOLLHUP))
             {
                 handleError(_events[i].data.fd);
+            }
+        }
+
+        // Check for timed-out clients
+        for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it) {
+            int clientFd = it->getFd();
+            if (timeoutManager.isClientTimedOut(clientFd)) {
+                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d timed out", clientFd);
+                close(clientFd);
+                timeoutManager.removeClient(clientFd);
             }
         }
     }
@@ -153,6 +165,7 @@ bool EpollClasse::isServerFd(int fd) {
     return false;
 }
 
+// Trouve un serveur correspondant à un hôte et un port donnés.
 int EpollClasse::findMatchingServer(const std::string& host, int port) {
     for (size_t i = 0; i < _serverConfigs.size(); ++i) {
         const Server& server = _serverConfigs[i];
@@ -224,24 +237,27 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 }
 
 // Gérer une requête client
-void EpollClasse::handleRequest(int client_fd)
-{
+void EpollClasse::handleRequest(int client_fd) {
     char buffer[BUFFER_SIZE];
     int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
-    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] read %d bytes from fd %d", bytes_read, client_fd);
-    if (bytes_read <= 0)
-    {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Closing fd %d (read <= 0)", client_fd);
+
+    if (bytes_read <= 0) {
+        if (bytes_read == 0) {
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
+        } else {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
+        }
         close(client_fd);
-        _bufferManager.remove(client_fd);
+        timeoutManager.removeClient(client_fd);
         return;
     }
+
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
 
     if (!_bufferManager.isRequestComplete(client_fd)) {
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data", client_fd);
+        Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data", client_fd);
         return;
     }
 
