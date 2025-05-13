@@ -71,15 +71,15 @@ server {
 - [x] Upload de fichiers
 - [x] Suppression de fichiers (DELETE)
 - [x] Gestion des redirections HTTP
-- [ ] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
+- [🖕] Gestion complète du CGI (fork, execve, pipes, variables d’environnement)
 - [x] Gestion correcte des fragments de requêtes HTTP (à vérifier mais normalement ok RequestBufferManager)
 - [ ] Gestion stricte C++98
 - [x] Gestion des pages d’erreur personnalisées
 - [x] Support complet des server_name par serveur (à vérifier avec des tests)
 - [x] Gestion stricte des allow_methods par location
-- [ ] Stress tests et robustesse (tester si le serveur ne crash pas sous forte charge ou avec des requêtes malformées)
+- [x] Stress tests et robustesse (tester si le serveur ne crash pas sous forte charge ou avec des requêtes malformées)
 - [ ] Comparaison avec NGINX (vérifier les headers, codes d’état, gestion des erreurs, etc.)
-- [ ] Gestion du timeout (pour les connexions inactives)
+- [🖕] Gestion du timeout (VRAIMENT BOFBOF A REVOIR)
 - [ ] uploads multipart/form-data (POST) juste écrire le body dans un fichier sans parser "Sans parser le multipart"
 
 ### Non explicitement demandés mais fortement recommandés
