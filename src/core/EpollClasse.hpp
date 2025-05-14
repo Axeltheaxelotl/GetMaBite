@@ -12,7 +12,7 @@
 #include "../serverConfig/ServerConfig.hpp"
 #include "../config/Server.hpp"
 #include "../http/RequestBufferManager.hpp"
-#include "../core/TimeoutManager.hpp" // Adjusted include path for TimeoutManager
+#include "../core/TimeoutManager.hpp"
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096
@@ -22,10 +22,10 @@ private:
     int _epoll_fd;
     int _biggest_fd;
     std::vector<ServerConfig> _servers;
-    std::vector<Server> _serverConfigs;  // Stores the server configurations
+    std::vector<Server> _serverConfigs;
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
-    TimeoutManager timeoutManager; // Manages client timeouts
+    TimeoutManager timeoutManager;
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);
