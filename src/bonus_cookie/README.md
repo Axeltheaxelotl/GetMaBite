@@ -73,15 +73,6 @@ Un cookie est une paire clé-valeur envoyée par un serveur HTTP au client (navi
 #### Sécurité des cookies
 - Les options `HttpOnly` et `Secure` sont importantes pour protéger les cookies contre les attaques XSS et MITM.
 
-### 5. Améliorations possibles
-- **Gestion des sessions avancée** :
-  - Utiliser un cookie `session_id` pour identifier les utilisateurs de manière unique.
-  - Associer chaque `session_id` à des données côté serveur (par exemple, dans une base de données ou une structure en mémoire).
-- **Encodage/décodage des cookies** :
-  - Ajouter des fonctions pour gérer les caractères spéciaux dans les noms et valeurs des cookies.
-- **Expiration des cookies côté serveur** :
-  - Implémenter une logique pour supprimer les cookies expirés côté serveur.
-
 ## Justification de pourquoi mes cookies sont parfaits 👌
 
 1. **Support des cookies** :
@@ -95,4 +86,10 @@ Un cookie est une paire clé-valeur envoyée par un serveur HTTP au client (navi
 3. **Exemples** :
    - Testé avec `test_cookies.py`.
 
+### 5. Améliorations possibles
 
+1. **Encodage/Decodage :** Ajouter un encodage pour gerer les caracteres speciaux dans les noms et valeurs des cookies.
+
+2. **Expiration cote serveur :** Implementer une logique pour supprimer les cookies expires.
+
+3. **Gestion des sessions:** Associer les cookies a une base de donnees ou un stockage en memoire pour gerer les sessions utilisateur.

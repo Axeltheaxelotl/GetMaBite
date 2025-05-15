@@ -332,3 +332,36 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Une compatibilité avec les navigateurs et clients HTTP.
 - Une gestion correcte des requêtes et réponses HTTP.
 - Une conformité aux bonnes pratiques pour éviter des comportements imprévus.
+
+---
+
+# Points à revoir (LES DERNIERS)
+
+### Gestion des cookies
+- Vérifiez que les cookies sensibles sont marqués `HttpOnly` et `Secure`. (je c pas si c obliger mais azy)
+- Ajoutez le support de l'attribut `SameSite` pour limiter les risques de CSRF. (la meme je c pas)
+
+### Pages d'erreur HTTP
+- Ajoutez des pages par défaut pour les codes manquants comme `405 Method Not Allowed` et `413 Payload Too Large`.
+- Vérifiez que les pages d'erreur personnalisées fonctionnent correctement.
+
+### Limitation du body client
+- Implémentez la directive `client_max_body_size` pour limiter la taille des requêtes.
+
+### Autoindex
+- Assurez-vous que l'option `autoindex` fonctionne correctement selon la configuration.
+
+### Logs détaillés
+- Ajoutez des logs pour les requêtes et réponses HTTP, incluant les erreurs.
+
+### Encodage chunked
+- Implémentez la gestion des réponses avec encodage `chunked`.
+
+### Méthodes HTTP
+- Ajoutez le support des méthodes `HEAD` et `OPTIONS`. (pas obliger)
+
+### Tests de charge
+- Effectuez des stress tests pour vérifier la stabilité sous forte charge.
+
+### Conformité HTTP/1.1
+- Vérifiez que les réponses respectent les standards de la RFC 7230.
