@@ -257,23 +257,6 @@ s.close()
   &emsp; - Quand un client envoie une requete, handleRequest lit, traite, repond, puis ferme<br>
   &emsp; - Tout passe par epoll, aucune operation bloquante.<br>
 
-  ---
-
-  <h2>Les derniers points manquants ou a ameliorer</h2>
-  <p>
-  <b>1. Support complet des server_name:</b><br>
-    &emsp; *Implemente la gestion de plusieurs server_name par server
-  </p>
-  <p>
-  <b>2. Gestion stricte des erreurs HTTP:</b><br>
-  &emsp; *Verifier que tous les codes d'etat HTTP sont exacts et que les pages d'erreur<br>
-  &emsp; personnalisees sont servies correctement.
-  </p>
-  <p>
-  <b>5.Timeouts:</b><br>
-  &emsp; *Implementation d une gestion de timeouts pour les connexions inactives.
-
-
 ---
 
 
