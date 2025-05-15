@@ -85,7 +85,7 @@ server {
 ### Non explicitement demandés mais fortement recommandés
 
 - [ ] Gestion stricte des headers HTTP (conformité aux standards HTTP, RFC 7230)
-- [ ] Support des cookies et gestion de session (bonus)
+- [x] Support des cookies et gestion de session (bonus)
 
 ## Contributeur
 
