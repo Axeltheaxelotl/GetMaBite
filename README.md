@@ -361,7 +361,7 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Ajoutez le support des méthodes `HEAD` et `OPTIONS`. (pas obliger)
 
 ### Tests de charge
-- Effectuez des stress tests pour vérifier la stabilité sous forte charge.
+- Effectuez des stress tests pour vérifier la stabilité sous forte charge. (j ai deja fait )
 
 ### Conformité HTTP/1.1
 - Vérifiez que les réponses respectent les standards de la RFC 7230.
