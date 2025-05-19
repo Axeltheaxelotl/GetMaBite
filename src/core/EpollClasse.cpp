@@ -189,8 +189,7 @@ void EpollClasse::acceptConnection(int server_fd)
     event.data.fd = client_fd;
 
     addToEpoll(client_fd, event);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d",
-                   inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "\n==================== Nouvelle connexion ====================\n[+] Client connecté depuis %s:%d\n===========================================================", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 }
 
 // Résoudre le chemin demandé
@@ -234,7 +233,7 @@ void EpollClasse::handleRequest(int client_fd) {
 
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "[fd %d] Timeout : connexion fermée.", client_fd);
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
         }
@@ -244,7 +243,6 @@ void EpollClasse::handleRequest(int client_fd) {
     }
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
-    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
 
     if (!_bufferManager.isRequestComplete(client_fd, _serverConfigs[0])) {
         if (_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size) {
@@ -256,7 +254,9 @@ void EpollClasse::handleRequest(int client_fd) {
     }
 
     std::string request = _bufferManager.get(client_fd);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
+    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "\n-------------------- Nouvelle requête HTTP --------------------");
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[fd %d] %s", client_fd, request.c_str());
+
     _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP
@@ -351,7 +351,7 @@ void EpollClasse::handleRequest(int client_fd) {
 
     // Utiliser resolvePath pour obtenir le chemin réel
     std::string resolvedPath = resolvePath(server, path);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[fd %d] Chemin résolu : %s", client_fd, resolvedPath.c_str());
 
     // Vérifier si le fichier existe
     struct stat file_stat;
@@ -380,7 +380,7 @@ void EpollClasse::handleRequest(int client_fd) {
     else
     {
         // Fichier non trouvé
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found: %s", resolvedPath.c_str());
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "[fd %d] Erreur : Impossible d'ouvrir %s", client_fd, resolvedPath.c_str());
         sendErrorResponse(client_fd, 404, server);
     }
 
@@ -474,7 +474,7 @@ void EpollClasse::setNonBlocking(int fd)
 void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies)
 {
     struct stat file_stat;
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[fd %d] Ouverture du fichier : %s", client_fd, filePath.c_str());
     // Exemple de gestion d'un cookie de compteur de visites
     int visit_count = 1;
     std::map<std::string, std::string>::const_iterator it = cookies.find("visit_count");
