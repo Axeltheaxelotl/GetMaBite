@@ -346,6 +346,7 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Vérifiez que les pages d'erreur personnalisées fonctionnent correctement.
 
 ### Limitation du body client
+
 - Implémentez la directive `client_max_body_size` pour limiter la taille des requêtes.
 
 ### Autoindex
