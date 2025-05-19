@@ -187,6 +187,23 @@ int EpollClasse::findMatchingServer(const std::string& host, int port)
 // Accepter une connexion
 void EpollClasse::acceptConnection(int server_fd)
 {
+    struct sockaddr_in client_address;
+    socklen_t addrlen = sizeof(client_address);
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
+    if (client_fd == -1)
+    {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept error: %s", strerror(errno));
+        return;
+    }
+
+    setNonBlocking(client_fd);
+
+    epoll_event event;
+    event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
+    event.data.fd = client_fd;
+
+    addToEpoll(client_fd, event);
+    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "\n==================== Nouvelle connexion ====================\n[+] Client connecté depuis %s:%d\n===========================================================", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 	struct sockaddr_in client_address;
 	socklen_t addrlen = sizeof(client_address);
 	int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
@@ -245,236 +262,181 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 }
 
 // Gérer une requête client
-void EpollClasse::handleRequest(int client_fd)
-{
-	char buffer[BUFFER_SIZE];
-	int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
-	if(bytes_read <= 0)
-	{
-		if(bytes_read == 0)
-		{
-			Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
-		}
-		else
-		{
-			Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
-		}
-		close(client_fd);
-		timeoutManager.removeClient(client_fd);
-		return;
-	}
-	buffer[bytes_read] = '\0';
-	_bufferManager.append(client_fd, std::string(buffer, bytes_read));
-	Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
-	if(!_bufferManager.isRequestComplete(client_fd))
-	{
-		Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data", client_fd);
-		return;
-	}
-	std::string request = _bufferManager.get(client_fd);
-	Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
-	_bufferManager.clear(client_fd);
-	// Parser la requête HTTP
-	std::string method, path, protocol;
-	std::istringstream requestStream(request);
-	requestStream >> method >> path >> protocol;
-	if(path.empty())
-		path = "/";
-	// Extraction des headers pour trouver Cookie
-	std::string line;
-	std::map<std::string, std::string> cookies;
-	while(std::getline(requestStream, line) && line != "\r")
-	{
-		if(line.find("Cookie:") == 0)
-		{
-			std::string cookieHeader = line.substr(7); // après "Cookie:"
-			// Trim
-			while(!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
-			cookies = CookieManager::parseCookies(cookieHeader);
-		}
-	}
-	// On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
-	const Server& server = _serverConfigs[0];
-	// Trouver la location correspondante (plus long préfixe)
-	const Location* matchedLocation = NULL;
-	size_t maxMatch = 0;
-	for(std::vector<Location>::const_iterator it = server.locations.begin(); it != server.locations.end(); ++it)
-	{
-		if(path.find(it->path) == 0 && it->path.length() > maxMatch)
-		{
-			matchedLocation = &(*it);
-			maxMatch = it->path.length();
-		}
-	}
-	// Vérification stricte des allow_methods
-	if(matchedLocation)
-	{
-		bool allowed = false;
-		for(size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-		{
-			if(matchedLocation->allow_methods[i] == method)
-			{
-				allowed = true;
-				break;
-			}
-		}
-		if(!allowed)
-		{
-			// Générer la liste des méthodes autorisées
-			std::string allowHeader = "Allow: ";
-			for(size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-			{
-				if(i > 0) allowHeader += ", ";
-				allowHeader += matchedLocation->allow_methods[i];
-			}
-			std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-			std::ostringstream response;
-			response << "HTTP/1.1 405 Method Not Allowed\r\n"
-			         << allowHeader << "\r\n"
-			         << "Content-Type: text/html\r\n"
-			         << "Content-Length: " << body.size() << "\r\n"
-			         << "\r\n"
-			         << body;
-			sendResponse(client_fd, response.str());
-			close(client_fd);
-			return;
-		}
-	}
-	else
-	{
-		// Si aucune location ne matche, vérifier allow_methods du server
-		bool allowed = false;
-		for(size_t i = 0; i < server.allow_methods.size(); ++i)
-		{
-			if(server.allow_methods[i] == method)
-			{
-				allowed = true;
-				break;
-			}
-		}
-		if(!allowed)
-		{
-			// Générer la liste des méthodes autorisées
-			std::string allowHeader = "Allow: ";
-			for(size_t i = 0; i < server.allow_methods.size(); ++i)
-			{
-				if(i > 0) allowHeader += ", ";
-				allowHeader += server.allow_methods[i];
-			}
-			std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-			std::ostringstream response;
-			response << "HTTP/1.1 405 Method Not Allowed\r\n"
-			         << allowHeader << "\r\n"
-			         << "Content-Type: text/html\r\n"
-			         << "Content-Length: " << body.size() << "\r\n"
-			         << "\r\n"
-			         << body;
-			sendResponse(client_fd, response.str());
-			close(client_fd);
-			return;
-		}
-	}
-	// Utiliser resolvePath pour obtenir le chemin réel
-	std::string resolvedPath = resolvePath(server, path);
-	// get CGI param
-	size_t cgiPos = resolvedPath.rfind("?");
-	std::string cgiParam = "";
-	if(cgiPos != std::string::npos && cgiPos + 1 < resolvedPath.length())
-	{
-		cgiParam = resolvedPath.substr(cgiPos + 1); // +1 to skip "?"
-		resolvedPath = resolvedPath.substr(0, cgiPos); // Remove the query string from the path
-	}
-	// Log the resolved path and CGI parameters
-	Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
-	// Vérifier si le fichier existe
-	struct stat file_stat;
-	if(::stat(resolvedPath.c_str(), &file_stat) == 0)
-	{
-		size_t cgiPos = resolvedPath.rfind(".cgi.");
-		if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
-		{
-			// Get the extension part after ".cgi."
-			std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
-			// Find the matching location and check if the extension is supported
-			Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
-			std::map<std::string, std::string> cgi_handlers;
-			// First check the matched location (if we have one)
-			if(matchedLocation)
-			{
-				std::map<std::string, std::string>::const_iterator cgiIt =
-				    matchedLocation->cgi_extensions.find(extension);
-				if(cgiIt != matchedLocation->cgi_extensions.end())
-				{
-					cgi_handlers[extension + "_location"] = cgiIt->second;
-					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in matched location: %s", cgiIt->second.c_str());
-				}
-			}
-			// Check all server-wide locations (collect all matches)
-			for(std::vector<Location>::const_iterator locIt = server.locations.begin();
-			        locIt != server.locations.end(); ++locIt)
-			{
-				std::map<std::string, std::string>::const_iterator cgiIt =
-				    locIt->cgi_extensions.find(extension);
-				if(cgiIt != locIt->cgi_extensions.end())
-				{
-					// Use a unique key by appending the location path
-					cgi_handlers[extension + "_" + locIt->path] = cgiIt->second;
-					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in location %s: %s",
-					               locIt->path.c_str(), cgiIt->second.c_str());
-				}
-			}
-			// Check server-wide CGI extensions
-			std::map<std::string, std::string>::const_iterator serverCgiIt =
-			    server.cgi_extensions.find(extension);
-			if(serverCgiIt != server.cgi_extensions.end())
-			{
-				cgi_handlers[extension] = serverCgiIt->second;
-				Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found server-wide CGI handler: %s", serverCgiIt->second.c_str());
-			}
-			if(!cgi_handlers.empty())
-			{
-				// Convert string to map before passing to handleCGI
-				std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
-                // Pass the body to handleCGI
-				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
-			}
-			else
-			{
-				// No handler found for this CGI extension
-				sendErrorResponse(client_fd, 501, server);
-			}
-		}
-		else if(method == "GET" || method == "HEAD")
-		{
-			// Passer cookies à handleGetRequest (à modifier dans la signature)
-			handleGetRequest(client_fd, resolvedPath, server, method == "HEAD", cookies);
-		}
-		else if(method == "POST")
-		{
-			handlePostRequest(client_fd, request, resolvedPath);
-		}
-		else if(method == "DELETE")
-		{
-			handleDeleteRequest(client_fd, resolvedPath);
-		}
-		else
-		{
-			// Méthode non supportée (ne devrait plus arriver)
-			std::string errorContent = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-			std::string response = "HTTP/1.1 405 Method Not Allowed\r\n"
-			                       "Content-Type: text/html\r\n"
-			                       "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-			                       + errorContent;
-			sendResponse(client_fd, response);
-		}
-	}
-	else
-	{
-		// Fichier non trouvé
-		Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found: %s", resolvedPath.c_str());
-		sendErrorResponse(client_fd, 404, server);
-	}
-	close(client_fd);
+void EpollClasse::handleRequest(int client_fd) {
+    char buffer[BUFFER_SIZE];
+    int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
+
+    if (bytes_read <= 0) {
+        if (bytes_read == 0) {
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
+        } else {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
+        }
+        close(client_fd);
+        timeoutManager.removeClient(client_fd);
+        return;
+    }
+
+    buffer[bytes_read] = '\0';
+    _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
+
+    if (!_bufferManager.isRequestComplete(client_fd, _serverConfigs[0])) {
+        if (_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size) {
+            sendErrorResponse(client_fd, 413, _serverConfigs[0]);
+            return;
+        }
+
+    std::string request = _bufferManager.get(client_fd);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
+    _bufferManager.clear(client_fd);
+
+    // Parser la requête HTTP
+    std::string method, path, protocol;
+    std::istringstream requestStream(request);
+    requestStream >> method >> path >> protocol;
+
+    if (path.empty())
+        path = "/";
+
+    // Extraction des headers pour trouver Cookie
+    std::string line;
+    std::map<std::string, std::string> cookies;
+    while (std::getline(requestStream, line) && line != "\r") {
+        if (line.find("Cookie:") == 0) {
+            std::string cookieHeader = line.substr(7); // après "Cookie:"
+            // Trim
+            while (!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
+            cookies = CookieManager::parseCookies(cookieHeader);
+        }
+    }
+
+    // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
+    const Server& server = _serverConfigs[0];
+
+    // Trouver la location correspondante (plus long préfixe)
+    const Location* matchedLocation = NULL;
+    size_t maxMatch = 0;
+    for (std::vector<Location>::const_iterator it = server.locations.begin(); it != server.locations.end(); ++it)
+    {
+        if (path.find(it->path) == 0 && it->path.length() > maxMatch)
+        {
+            matchedLocation = &(*it);
+            maxMatch = it->path.length();
+        }
+    }
+
+    // Vérification stricte des allow_methods
+    if (matchedLocation)
+    {
+        bool allowed = false;
+        for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+        {
+            if (matchedLocation->allow_methods[i] == method)
+            {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed)
+        {
+            // Générer la liste des méthodes autorisées
+            std::string allowHeader = "Allow: ";
+            for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+            {
+                if (i > 0) allowHeader += ", ";
+                allowHeader += matchedLocation->allow_methods[i];
+            }
+            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+            std::ostringstream response;
+            response << "HTTP/1.1 405 Method Not Allowed\r\n"
+                     << allowHeader << "\r\n"
+                     << "Content-Type: text/html\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "\r\n"
+                     << body;
+            sendResponse(client_fd, response.str());
+            close(client_fd);
+            return;
+        }
+    }
+    else
+    {
+        // Si aucune location ne matche, vérifier allow_methods du server (ou GET par défaut)
+        bool allowed = false;
+        if (!server.locations.empty()) {
+            // Si le server a une location "/", on peut utiliser ses allow_methods
+            for (size_t i = 0; i < server.locations.size(); ++i) {
+                if (server.locations[i].path == "/") {
+                    for (size_t j = 0; j < server.locations[i].allow_methods.size(); ++j) {
+                        if (server.locations[i].allow_methods[j] == method) {
+                            allowed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Si pas de location /, GET seulement autorisé par défaut
+        if (!allowed && method == "GET")
+            allowed = true;
+        if (!allowed) {
+            std::string allowHeader = "Allow: GET";
+            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+            std::ostringstream response;
+            response << "HTTP/1.1 405 Method Not Allowed\r\n"
+                     << allowHeader << "\r\n"
+                     << "Content-Type: text/html\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "\r\n"
+                     << body;
+            sendResponse(client_fd, response.str());
+            close(client_fd);
+            return;
+        }
+    }
+
+    // Utiliser resolvePath pour obtenir le chemin réel
+    std::string resolvedPath = resolvePath(server, path);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
+
+    // Vérifier si le fichier existe
+    struct stat file_stat;
+    if (::stat(resolvedPath.c_str(), &file_stat) == 0)
+    {
+        // Le fichier existe, on le traite selon la méthode
+        if (method == "GET" || method == "HEAD")
+        {
+            // Passer cookies à handleGetRequest (à modifier dans la signature)
+            handleGetRequest(client_fd, resolvedPath, server, method == "HEAD", cookies);
+        }
+        else if (method == "POST")
+        {
+            handlePostRequest(client_fd, request, resolvedPath);
+        }
+        else if (method == "DELETE")
+        {
+            handleDeleteRequest(client_fd, resolvedPath);
+        }
+        else
+        {
+            // Méthode non supportée (ne devrait plus arriver)
+            std::string errorContent = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+            std::string response = "HTTP/1.1 405 Method Not Allowed\r\n"
+                                "Content-Type: text/html\r\n"
+                                "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                + errorContent;
+            sendResponse(client_fd, response);
+        }
+    }
+    else
+    {
+        // Fichier non trouvé
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found: %s", resolvedPath.c_str());
+        sendErrorResponse(client_fd, 404, server);
+    }
+
+    close(client_fd);
 }
 
 void EpollClasse::sendResponse(int client_fd, const std::string &response)
@@ -562,179 +524,177 @@ void EpollClasse::setNonBlocking(int fd)
 
 void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies)
 {
-	struct stat file_stat;
-	Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
-	// Exemple de gestion d'un cookie de compteur de visites
-	int visit_count = 1;
-	std::map<std::string, std::string>::const_iterator it = cookies.find("visit_count");
-	if(it != cookies.end())
-	{
-		visit_count = atoi(it->second.c_str());
-		if(visit_count < 1) visit_count = 1;
-		visit_count++;
-	}
-	std::ostringstream oss;
-	oss << visit_count;
-	std::string setCookieHeader = CookieManager::createSetCookieHeader("visit_count", oss.str(), 3600, "/");
-	if(::stat(filePath.c_str(), &file_stat) == 0)
-	{
-		if(S_ISDIR(file_stat.st_mode))
-		{
-			std::string indexFile = server.index.empty() ? "index.html" : server.index;
-			std::string indexPath = filePath;
-			if(indexPath[indexPath.length() - 1] != '/')
-				indexPath += "/";
-			indexPath += indexFile;
-			struct stat index_stat;
-			if(::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode))
-			{
-				std::ifstream file(indexPath.c_str(), std::ios::binary);
-				if(file)
-				{
-					std::string content((std::istreambuf_iterator<char>(file)),
-					                    std::istreambuf_iterator<char>());
-					std::ostringstream response;
-					response << "HTTP/1.1 200 OK\r\n"
-					         << setCookieHeader << "\r\n"
-					         << "Content-Type: text/html\r\n"
-					         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
-					if(!isHead)
-						response << content;
-					sendResponse(client_fd, response.str());
-				}
-				else
-				{
-					std::string errorContent = ErreurDansTaGrosseDaronne(403);
-					std::string response = "HTTP/1.1 403 Forbidden\r\n"
-					                       + setCookieHeader + "\r\n"
-					                       + "Content-Type: text/html\r\n"
-					                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-					                       + errorContent;
-					sendResponse(client_fd, response);
-				}
-			}
-			else
-			{
-				// Pas de fichier index, vérifier autoindex
-				bool autoindex = false;
-				for(std::vector<Location>::const_iterator it = server.locations.begin();
-				        it != server.locations.end(); ++it)
-				{
-					if(filePath.find(it->path) == 0)
-					{
-						autoindex = it->autoindex;
-						break;
-					}
-				}
-				if(autoindex)
-				{
-					std::string content = AutoIndex::generateAutoIndexPage(filePath);
-					std::string response = "HTTP/1.1 200 OK\r\n"
-					                       "Content-Type: text/html\r\n"
-					                       "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
-					if(!isHead)
-						response += content;
-					sendResponse(client_fd, response);
-				}
-				else
-				{
-					std::string errorContent = ErreurDansTaGrosseDaronne(403);
-					std::string response = "HTTP/1.1 403 Forbidden\r\n"
-					                       + setCookieHeader + "\r\n"
-					                       + "Content-Type: text/html\r\n"
-					                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-					                       + errorContent;
-					sendResponse(client_fd, response);
-				}
-			}
-		}
-		else if(S_ISREG(file_stat.st_mode))
-		{
-			// C'est un fichier normal, le lire et l'envoyer
-			std::ifstream file(filePath.c_str(), std::ios::binary);
-			if(file)
-			{
-				std::string content((std::istreambuf_iterator<char>(file)),
-				                    std::istreambuf_iterator<char>());
-				std::ostringstream response;
-				response << "HTTP/1.1 200 OK\r\n"
-				         << setCookieHeader << "\r\n"
-				         << "Content-Type: text/html\r\n"
-				         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
-				if(!isHead)
-					response << content;
-				sendResponse(client_fd, response.str());
-			}
-			else
-			{
-				std::string errorContent = ErreurDansTaGrosseDaronne(403);
-				std::string response = "HTTP/1.1 403 Forbidden\r\n"
-				                       + setCookieHeader + "\r\n"
-				                       + "Content-Type: text/html\r\n"
-				                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-				                       + errorContent;
-				sendResponse(client_fd, response);
-			}
-		}
-		else
-		{
-			// Ni fichier ni dossier
-			std::string errorContent = ErreurDansTaGrosseDaronne(404);
-			std::string response = "HTTP/1.1 404 Not Found\r\n"
-			                       + setCookieHeader + "\r\n"
-			                       + "Content-Type: text/html\r\n"
-			                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-			                       + errorContent;
-			sendResponse(client_fd, response);
-		}
-	}
-	else
-	{
-		std::string errorContent = ErreurDansTaGrosseDaronne(404);
-		std::string response = "HTTP/1.1 404 Not Found\r\n"
-		                       + setCookieHeader + "\r\n"
-		                       + "Content-Type: text/html\r\n"
-		                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-		                       + errorContent;
-		sendResponse(client_fd, response);
-	}
+    struct stat file_stat;
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
+    // Exemple de gestion d'un cookie de compteur de visites
+    int visit_count = 1;
+    std::map<std::string, std::string>::const_iterator it = cookies.find("visit_count");
+    if (it != cookies.end()) {
+        visit_count = atoi(it->second.c_str());
+        if (visit_count < 1) visit_count = 1;
+        visit_count++;
+    }
+    std::ostringstream oss;
+    oss << visit_count;
+    std::string setCookieHeader = CookieManager::createSetCookieHeader("visit_count", oss.str(), 3600, "/");
+
+    if (::stat(filePath.c_str(), &file_stat) == 0)
+    {
+        if (S_ISDIR(file_stat.st_mode))
+        {
+            std::string indexFile = server.index.empty() ? "index.html" : server.index;
+            std::string indexPath = filePath;
+            if (indexPath[indexPath.length() - 1] != '/')
+                indexPath += "/";
+            indexPath += indexFile;
+            struct stat index_stat;
+            if (::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode))
+            {
+                std::ifstream file(indexPath.c_str(), std::ios::binary);
+                if (file)
+                {
+                    std::string content((std::istreambuf_iterator<char>(file)),
+                                       std::istreambuf_iterator<char>());
+                    std::ostringstream response;
+                    response << "HTTP/1.1 200 OK\r\n"
+                             << setCookieHeader << "\r\n"
+                             << "Content-Type: text/html\r\n"
+                             << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
+                    if (!isHead)
+                        response << content;
+                    sendResponse(client_fd, response.str());
+                }
+                else
+                {
+                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                    std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                         + setCookieHeader + "\r\n"
+                                         + "Content-Type: text/html\r\n"
+                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                         + errorContent;
+                    sendResponse(client_fd, response);
+                }
+            }
+            else
+            {
+                // Pas de fichier index, vérifier autoindex
+                bool autoindex = false;
+                for (std::vector<Location>::const_iterator it = server.locations.begin();
+                     it != server.locations.end(); ++it)
+                {
+                    if (filePath.find(it->path) == 0)
+                    {
+                        autoindex = it->autoindex;
+                        break;
+                    }
+                }
+                if (autoindex)
+                {
+                    std::string content = AutoIndex::generateAutoIndexPage(filePath);
+                    std::string response = "HTTP/1.1 200 OK\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                    if (!isHead)
+                        response += content;
+                    sendResponse(client_fd, response);
+                }
+                else
+                {
+                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                    std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                         + setCookieHeader + "\r\n"
+                                         + "Content-Type: text/html\r\n"
+                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                         + errorContent;
+                    sendResponse(client_fd, response);
+                }
+            }
+        }
+        else if (S_ISREG(file_stat.st_mode))
+        {
+            // C'est un fichier normal, le lire et l'envoyer
+            std::ifstream file(filePath.c_str(), std::ios::binary);
+            if (file)
+            {
+                std::string content((std::istreambuf_iterator<char>(file)),
+                                   std::istreambuf_iterator<char>());
+                std::ostringstream response;
+                response << "HTTP/1.1 200 OK\r\n"
+                         << setCookieHeader << "\r\n"
+                         << "Content-Type: text/html\r\n"
+                         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
+                if (!isHead)
+                    response << content;
+                sendResponse(client_fd, response.str());
+            }
+            else
+            {
+                std::string errorContent = ErreurDansTaGrosseDaronne(403);
+                std::string response = "HTTP/1.1 403 Forbidden\r\n"
+                                     + setCookieHeader + "\r\n"
+                                     + "Content-Type: text/html\r\n"
+                                     + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                     + errorContent;
+                sendResponse(client_fd, response);
+            }
+        }
+        else
+        {
+            // Ni fichier ni dossier
+            std::string errorContent = ErreurDansTaGrosseDaronne(404);
+            std::string response = "HTTP/1.1 404 Not Found\r\n"
+                                 + setCookieHeader + "\r\n"
+                                 + "Content-Type: text/html\r\n"
+                                 + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                                 + errorContent;
+            sendResponse(client_fd, response);
+        }
+    }
+    else
+    {
+        std::string errorContent = ErreurDansTaGrosseDaronne(404);
+        std::string response = "HTTP/1.1 404 Not Found\r\n"
+                             + setCookieHeader + "\r\n"
+                             + "Content-Type: text/html\r\n"
+                             + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
+                             + errorContent;
+        sendResponse(client_fd, response);
+    }
+    close(client_fd);
 }
 
 // Envoie une réponse d'erreur HTTP personnalisée si possible
-void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server)
-{
-	std::string body;
-	std::string status = StatusCodeString(code);
-	std::string contentType = "text/html";
-	std::string customPath;
-	std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
-	if(it != server.error_pages.end())
-	{
-		// On tente de lire le fichier d'erreur personnalisé
-		std::ifstream file(it->second.c_str());
-		if(file.is_open())
-		{
-			std::ostringstream ss;
-			ss << file.rdbuf();
-			body = ss.str();
-			file.close();
-		}
-		else
-		{
-			// Fichier non trouvé, fallback sur la page par défaut
-			body = ErreurDansTaGrosseDaronne(code);
-		}
-	}
-	else
-	{
-		body = ErreurDansTaGrosseDaronne(code);
-	}
-	std::ostringstream response;
-	response << "HTTP/1.1 " << code << " " << status << "\r\n"
-	         << "Content-Type: " << contentType << "\r\n"
-	         << "Content-Length: " << body.size() << "\r\n\r\n"
-	         << body;
-	sendResponse(client_fd, response.str());
+void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server) {
+    std::string body;
+    std::string status = StatusCodeString(code);
+    std::string contentType = "text/html";
+    std::string customPath;
+    std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+    if (it != server.error_pages.end()) {
+        // On tente de lire le fichier d'erreur personnalisé
+        std::ifstream file(it->second.c_str());
+        if (file.is_open()) {
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            body = ss.str();
+            file.close();
+        } else {
+            // Fichier non trouvé, fallback sur la page par défaut
+            body = ErreurDansTaGrosseDaronne(code);
+        }
+    } else {
+        body = ErreurDansTaGrosseDaronne(code);
+    }
+    std::ostringstream response;
+    response << "HTTP/1.1 " << code << " " << status << "\r\n";
+    if (code == 405 && !allowHeader.empty()) {
+        response << allowHeader << "\r\n";
+    }
+    response << "Content-Type: " << contentType << "\r\n"
+             << "Content-Length: " << body.size() << "\r\n\r\n"
+             << body;
+    sendResponse(client_fd, response.str());
+}
 }
 
 // Utility function to parse CGI query parameters
