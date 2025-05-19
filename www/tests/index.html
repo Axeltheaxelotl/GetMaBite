@@ -2,51 +2,112 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Tests HTTP Webserv</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2em; background: #f8f8f8; }
-        h1 { color: #333; }
-        section { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; margin-bottom: 2em; padding: 1em 2em; }
-        label, input, button, textarea { display: block; margin: 0.5em 0; }
-        .result { background: #eee; padding: 0.5em; border-radius: 4px; margin-top: 0.5em; }
-    </style>
+    <title>Webserv - Super Testeur HTTP</title>
+    <link rel="stylesheet" href="/tests/style.css">
+    <link rel="icon" href="/tests/favicon.ico">
 </head>
 <body>
-    <h1>Tests HTTP Webserv</h1>
+    <header>
+        <img src="/tests/assets/logo.png" alt="Webserv Logo">
+        <h1>Webserv - Super Testeur HTTP</h1>
+        <div class="explain">Testez toutes les fonctionnalités de votre serveur HTTP C++98 façon NGINX !</div>
+    </header>
+
     <section>
         <h2>GET</h2>
-        <a href="/tests/index.html" target="_blank">GET ce fichier (index.html)</a>
-        <button onclick="testGet()">GET /tests/test.txt (JS)</button>
+        <div class="explain">Testez la récupération de fichiers statiques et la gestion des erreurs 404.</div>
+        <button onclick="testGet('/tests/test.txt')">GET /tests/test.txt</button>
+        <button onclick="testGet('/tests/inexistant.txt')">GET inexistant (404)</button>
         <div id="getResult" class="result"></div>
     </section>
+
     <section>
         <h2>POST</h2>
+        <div class="explain">Testez l'écriture de données dans un fichier via POST.</div>
         <form id="postForm" onsubmit="testPost(event)">
             <label>Contenu à envoyer :</label>
-            <textarea name="content" rows="3">Ceci est un test POST</textarea>
+            <textarea name="content" rows="2" required>Bonjour Webserv !</textarea>
             <button type="submit">POST sur /tests/post_result.txt</button>
         </form>
         <div id="postResult" class="result"></div>
     </section>
+
     <section>
         <h2>DELETE</h2>
+        <div class="explain">Testez la suppression d'un fichier (DELETE).</div>
         <button onclick="testDelete()">DELETE /tests/post_result.txt</button>
         <div id="deleteResult" class="result"></div>
     </section>
+
     <section>
         <h2>Upload de fichier (POST)</h2>
+        <div class="explain">Testez l'upload de fichier avec un formulaire multipart.</div>
         <form id="uploadForm" enctype="multipart/form-data" onsubmit="testUpload(event)">
             <input type="file" name="file" required>
             <button type="submit">Uploader sur /tests/uploaded_file.txt</button>
         </form>
         <div id="uploadResult" class="result"></div>
     </section>
+
+    <section>
+        <h2>Cookies</h2>
+        <div class="explain">Testez la gestion des cookies (ex : compteur de visites).</div>
+        <button onclick="testCookie()">Test Cookie (GET /)</button>
+        <div id="cookieResult" class="result"></div>
+    </section>
+
+    <section>
+        <h2>Erreurs HTTP</h2>
+        <div class="explain">Testez les pages d'erreur personnalisées (400, 401, 403, 404, 405, 413, 500...)</div>
+        <button onclick="testError(400, '/badrequest')">400 Bad Request</button>
+        <button onclick="testError(401, '/unauthorized')">401 Unauthorized</button>
+        <button onclick="testError(403, '/forbidden')">403 Forbidden</button>
+        <button onclick="testError(404, '/notfound')">404 Not Found</button>
+        <button onclick="testError(405, '/tests/post_result.txt', 'POST')">405 Method Not Allowed</button>
+        <button onclick="testError(413, '/tests/post_result.txt', 'POST', 'A'.repeat(1024*1024*2))">413 Payload Too Large</button>
+        <button onclick="testError(500, '/cause500')">500 Internal Server Error</button>
+        <div id="errorResult" class="result"></div>
+    </section>
+
+    <section>
+        <h2>CGI</h2>
+        <div class="explain">Testez l'exécution d'un script CGI Python.</div>
+        <button onclick="testGet('/cgi-stuff-folder/run.py')">GET /cgi-stuff-folder/run.py</button>
+        <div id="cgiResult" class="result"></div>
+    </section>
+
+    <section>
+        <h2>Body Size (413)</h2>
+        <div class="explain">Testez la limite de taille du body (client_max_body_size).</div>
+        <button onclick="testBodySize(1024*1024 - 1)">POST body < 1Mo (OK)</button>
+        <button onclick="testBodySize(1024*1024)">POST body = 1Mo (OK)</button>
+        <button onclick="testBodySize(1024*1024 + 1)">POST body > 1Mo (413)</button>
+        <div id="bodySizeResult" class="result"></div>
+    </section>
+
+    <section>
+        <h2>Redirection</h2>
+        <div class="explain">Testez les redirections HTTP (301, 302...)</div>
+        <button onclick="testRedirect('/redirect')">Redirection /redirect</button>
+        <div id="redirectResult" class="result"></div>
+    </section>
+
+    <footer>
+        <div>Webserv &copy; 2025 | <a href="https://datatracker.ietf.org/doc/html/rfc2616" target="_blank">RFC HTTP/1.1</a> | <a href="https://nginx.org/en/docs/" target="_blank">Docs NGINX</a></div>
+        <div>Page de test générée par <b>webserv</b> | <a href="/tests/style.css" target="_blank">Voir le CSS</a></div>
+    </footer>
+
     <script>
-    function testGet() {
-        fetch('/tests/test.txt')
-            .then(r => r.text())
-            .then(txt => document.getElementById('getResult').textContent = txt)
-            .catch(e => document.getElementById('getResult').textContent = 'Erreur: ' + e);
+    function testGet(path) {
+        fetch(path)
+            .then(r => r.text().then(txt => {
+                if (path.includes('cgi')) document.getElementById('cgiResult').textContent = txt;
+                else document.getElementById('getResult').textContent = txt;
+            }))
+            .catch(e => {
+                if (path.includes('cgi')) document.getElementById('cgiResult').textContent = 'Erreur: ' + e;
+                else document.getElementById('getResult').textContent = 'Erreur: ' + e;
+            });
     }
     function testPost(e) {
         e.preventDefault();
@@ -71,11 +132,42 @@
         const data = new FormData(form);
         fetch('/tests/uploaded_file.txt', {
             method: 'POST',
-            body: data.get('file')
+            body: data
         })
         .then(r => r.text())
         .then(txt => document.getElementById('uploadResult').textContent = txt)
         .catch(e => document.getElementById('uploadResult').textContent = 'Erreur: ' + e);
+    }
+    function testCookie() {
+        fetch('/')
+            .then(r => r.text())
+            .then(txt => document.getElementById('cookieResult').textContent = txt)
+            .catch(e => document.getElementById('cookieResult').textContent = 'Erreur: ' + e);
+    }
+    function testError(code, path, method = 'GET', data = null) {
+        let opts = { method };
+        if (method === 'POST' && data) opts.body = data;
+        fetch(path, opts)
+            .then(r => r.text())
+            .then(txt => document.getElementById('errorResult').textContent = txt)
+            .catch(e => document.getElementById('errorResult').textContent = 'Erreur: ' + e);
+    }
+    function testBodySize(size) {
+        const body = 'A'.repeat(size);
+        fetch('/tests/post_result.txt', {
+            method: 'POST',
+            body: body
+        })
+        .then(r => r.text())
+        .then(txt => document.getElementById('bodySizeResult').textContent = txt)
+        .catch(e => document.getElementById('bodySizeResult').textContent = 'Erreur: ' + e);
+    }
+    function testRedirect(path) {
+        fetch(path, { redirect: 'manual' })
+            .then(r => {
+                document.getElementById('redirectResult').textContent = 'Status: ' + r.status + ' | Location: ' + r.headers.get('Location');
+            })
+            .catch(e => document.getElementById('redirectResult').textContent = 'Erreur: ' + e);
     }
     </script>
 </body>

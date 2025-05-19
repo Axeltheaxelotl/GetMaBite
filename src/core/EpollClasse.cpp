@@ -242,12 +242,15 @@ void EpollClasse::handleRequest(int client_fd) {
         timeoutManager.removeClient(client_fd);
         return;
     }
-
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
 
-    if (!_bufferManager.isRequestComplete(client_fd)) {
+    if (!_bufferManager.isRequestComplete(client_fd, _serverConfigs[0])) {
+        if (_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size) {
+            sendErrorResponse(client_fd, 413, _serverConfigs[0]);
+            return;
+        }
         Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data", client_fd);
         return;
     }
@@ -312,15 +315,8 @@ void EpollClasse::handleRequest(int client_fd) {
                 if (i > 0) allowHeader += ", ";
                 allowHeader += matchedLocation->allow_methods[i];
             }
-            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-            std::ostringstream response;
-            response << "HTTP/1.1 405 Method Not Allowed\r\n"
-                     << allowHeader << "\r\n"
-                     << "Content-Type: text/html\r\n"
-                     << "Content-Length: " << body.size() << "\r\n"
-                     << "\r\n"
-                     << body;
-            sendResponse(client_fd, response.str());
+            // Utilise la page d'erreur personnalisée 405
+            sendErrorResponse(client_fd, 405, server, allowHeader);
             close(client_fd);
             return;
         }
@@ -347,15 +343,7 @@ void EpollClasse::handleRequest(int client_fd) {
             allowed = true;
         if (!allowed) {
             std::string allowHeader = "Allow: GET";
-            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-            std::ostringstream response;
-            response << "HTTP/1.1 405 Method Not Allowed\r\n"
-                     << allowHeader << "\r\n"
-                     << "Content-Type: text/html\r\n"
-                     << "Content-Length: " << body.size() << "\r\n"
-                     << "\r\n"
-                     << body;
-            sendResponse(client_fd, response.str());
+            sendErrorResponse(client_fd, 405, server, allowHeader);
             close(client_fd);
             return;
         }
@@ -386,12 +374,7 @@ void EpollClasse::handleRequest(int client_fd) {
         else
         {
             // Méthode non supportée (ne devrait plus arriver)
-            std::string errorContent = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-            std::string response = "HTTP/1.1 405 Method Not Allowed\r\n"
-                                "Content-Type: text/html\r\n"
-                                "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                                + errorContent;
-            sendResponse(client_fd, response);
+            sendErrorResponse(client_fd, 405, server, "");
         }
     }
     else
@@ -630,7 +613,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, c
 }
 
 // Envoie une réponse d'erreur HTTP personnalisée si possible
-void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server) {
+void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server, const std::string& allowHeader) {
     std::string body;
     std::string status = StatusCodeString(code);
     std::string contentType = "text/html";
@@ -652,8 +635,11 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
         body = ErreurDansTaGrosseDaronne(code);
     }
     std::ostringstream response;
-    response << "HTTP/1.1 " << code << " " << status << "\r\n"
-             << "Content-Type: " << contentType << "\r\n"
+    response << "HTTP/1.1 " << code << " " << status << "\r\n";
+    if (code == 405 && !allowHeader.empty()) {
+        response << allowHeader << "\r\n";
+    }
+    response << "Content-Type: " << contentType << "\r\n"
              << "Content-Length: " << body.size() << "\r\n\r\n"
              << body;
     sendResponse(client_fd, response.str());

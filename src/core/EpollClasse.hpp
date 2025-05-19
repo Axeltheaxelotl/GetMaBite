@@ -40,7 +40,7 @@ private:
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);
-    void sendErrorResponse(int client_fd, int code, const Server& server);
+    void sendErrorResponse(int client_fd, int code, const Server& server, const std::string& allowHeader = "");
 
     // Finds the matching server based on host and port
     int findMatchingServer(const std::string& host, int port);
