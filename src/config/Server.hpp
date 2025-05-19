@@ -15,6 +15,8 @@ public:
 	std::string                     index;
 	int                             client_max_body_size;
 	std::map<int, std::string>      error_pages;
+	std::map<std::string, std::string> cgi_extensions;
+	std::vector<std::string>         allow_methods;
 
 	Server();
 	~Server();

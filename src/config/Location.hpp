@@ -12,7 +12,7 @@ public:
     std::string                      alias;
     std::string                      index;
     std::vector<std::string>         allow_methods;
-    std::map<std::string, std::string> cgi_extensions;
+	std::map<std::string, std::string> cgi_extensions;
     std::string                      upload_path;
     bool                             autoindex;
     int                              return_code;

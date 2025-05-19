@@ -31,10 +31,10 @@ private:
     bool isServerFd(int fd);
     void addToEpoll(int fd, epoll_event &event);
     void handleError(int fd);
-    
+
     // Méthode pour résoudre les chemins
     std::string resolvePath(const Server &server, const std::string &requestedPath);
-    
+
     // Méthodes de gestion des requêtes HTTP
     void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies);
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
@@ -44,6 +44,10 @@ private:
 
     // Finds the matching server based on host and port
     int findMatchingServer(const std::string& host, int port);
+
+    // Handle CGI requests
+    void handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &body);
+    std::map<std::string, std::string> parseCGIParams(const std::string& paramString);
 
 public:
     EpollClasse();

@@ -15,7 +15,7 @@ CXX       = clang++
 STD       = -std=c++98
 CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
 INCLUDES  = -Isrc -Isrc/serverConfig -Isrc/core -Isrc/config -Isrc/utils -Isrc/routes -I./src/core
-DEBUG_FLAGS = -O0 -g3 -flto $(STD)
+DEBUG_FLAGS = -O0 -g3 $(STD)
 OBJ_DIR   = ./objs
 
 SRCS      = src/main.cpp \
@@ -34,6 +34,7 @@ SRCS      = src/main.cpp \
 			src/http/RequestBufferManager.cpp \
 			src/bonus_cookie/CookieManager.cpp \
 			src/bonus_cookie/ParseCookie.cpp \
+			src/cgi/CgiHandler.cpp \
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
@@ -58,6 +59,7 @@ $(OBJ_DIR)/%.o: src/%.cpp
 debug: CXXFLAGS = $(DEBUG_FLAGS)
 debug:
 	@printf "$(BLUE)> Debug mode <$(END)\n"
+	@$(MAKE) fclean
 	@$(MAKE) all
 
 clean:
