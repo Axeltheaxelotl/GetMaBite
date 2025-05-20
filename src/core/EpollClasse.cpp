@@ -240,7 +240,6 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 	CgiHandler cgiHandler(client_fd, cgiPath, method, cgi_handler, cgiParams, request);
 	std::string response = cgiHandler.executeCgi();
 	sendResponse(client_fd, response);
-	close(client_fd);
 }
 
 // Gérer une requête client

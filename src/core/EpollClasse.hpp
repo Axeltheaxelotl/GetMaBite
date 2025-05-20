@@ -26,6 +26,7 @@ private:
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
     TimeoutManager timeoutManager;
+    std::map<int, int> _cgiPipes; // Map to store pipe_fd to client_fd mapping
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);
@@ -56,6 +57,7 @@ public:
     void serverRun();
     void handleRequest(int client_fd);
     void acceptConnection(int server_fd);
+    void processCGIOutput(int pipe_fd); // Declare the processCGIOutput function
 };
 
 #endif
