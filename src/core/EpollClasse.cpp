@@ -264,14 +264,20 @@ void EpollClasse::handleRequest(int client_fd)
 	buffer[bytes_read] = '\0';
 	_bufferManager.append(client_fd, std::string(buffer, bytes_read));
 	Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
+	// Parse la méthode HTTP AVANT de vérifier la taille du body
+	std::string temp_request = _bufferManager.get(client_fd);
+	std::istringstream tempStream(temp_request);
+	std::string temp_method;
+	tempStream >> temp_method;
+	// Vérifie la taille du body UNIQUEMENT pour POST/PUT/PATCH
 	if(!_bufferManager.isRequestComplete(client_fd, _serverConfigs[0]))
 	{
-		if(_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size)
+		if ((temp_method == "POST" || temp_method == "PUT" || temp_method == "PATCH") &&
+			_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size)
 		{
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Request too large for fd %d", client_fd);
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Request size: %zu bytes", _bufferManager.get(client_fd).size());
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Max body size: %d bytes", _serverConfigs[0].client_max_body_size);
-			Logger::logMsg(FUCK_YOU, CONSOLE_OUTPUT, "YOU DUMB FUCK, THE REQUEST SIZE DOES NOT RESET AND GETS ADDED UP AT EVERY REQUEST");
 			sendErrorResponse(client_fd, 413, _serverConfigs[0]);
 			return;
 		}

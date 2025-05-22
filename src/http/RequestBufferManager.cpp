@@ -5,6 +5,9 @@
 
 void RequestBufferManager::append(int client_fd, const std::string& data) {
     buffers[client_fd] += data;
+    // Affiche seulement si le buffer devient grand (debug minimal)
+    if (buffers[client_fd].size() > 4096)
+        printf("[DEBUG] fd=%d, buffer_size=%zu\n", client_fd, buffers[client_fd].size());
 }
 
 std::string& RequestBufferManager::get(int client_fd) {
