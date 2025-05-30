@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
+/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/05/19 23:56:11 by smasse           ###   ########.fr       */
+/*   Updated: 2025/05/30 09:46:05 by alanty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -261,6 +261,8 @@ std::vector<Server> parseConfig(const std::string &filepath)
 		{
 			std::string path;
 			iss >> path;
+			if (!path.empty() && path[path.size() - 1] == ';')
+				path.erase(path.size() - 1);
 			if(currentLocation)
 			{
 				if(!currentLocation->root.empty())
@@ -284,6 +286,8 @@ std::vector<Server> parseConfig(const std::string &filepath)
 		{
 			std::string idx;
 			iss >> idx;
+			if (!idx.empty() && idx[idx.size() - 1] == ';')
+				idx.erase(idx.size() - 1);
 			if(currentLocation)
 			{
 				currentLocation->index = idx;

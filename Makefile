@@ -35,6 +35,7 @@ SRCS      = src/main.cpp \
 			src/bonus_cookie/CookieManager.cpp \
 			src/bonus_cookie/ParseCookie.cpp \
 			src/cgi/CgiHandler.cpp \
+            src/httpRouting/ServerRouter.cpp \
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 

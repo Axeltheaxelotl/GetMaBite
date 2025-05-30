@@ -15,6 +15,9 @@
 #include"../bonus_cookie/CookieManager.hpp"
 #include"../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
+#include "../httpRouting/ServerRouter.hpp"
+#include "../routes/RedirectionHandler.hpp"
+#include <ctime>
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -291,21 +294,52 @@ void EpollClasse::handleRequest(int client_fd)
 	requestStream >> method >> path >> protocol;
 	if(path.empty())
 		path = "/";
-	// Extraction des headers pour trouver Cookie
+	// Vérification stricte de la requête HTTP (400 Bad Request)
+	if (method.empty() || path.empty() || protocol.empty() || protocol.find("HTTP/") != 0) {
+		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Malformed HTTP request on fd %d", client_fd);
+		sendErrorResponse(client_fd, 400, _serverConfigs[0]); // Use default server config
+		close(client_fd);
+		return;
+	}
+	// Extraction des headers pour trouver Host et Cookie
 	std::string line;
+	std::string hostHeader;
 	std::map<std::string, std::string> cookies;
 	while(std::getline(requestStream, line) && line != "\r")
 	{
+		if(line.find("Host:") == 0)
+		{
+			hostHeader = line.substr(5); // après "Host:"
+			while(!hostHeader.empty() && (hostHeader[0] == ' ' || hostHeader[0] == '\t')) hostHeader.erase(0, 1);
+			// Enlever le port si présent dans Host
+			size_t colon = hostHeader.find(":");
+			if(colon != std::string::npos)
+				hostHeader = hostHeader.substr(0, colon);
+		}
 		if(line.find("Cookie:") == 0)
 		{
 			std::string cookieHeader = line.substr(7); // après "Cookie:"
-			// Trim
 			while(!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
 			cookies = CookieManager::parseCookies(cookieHeader);
 		}
 	}
-	// On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
-	const Server& server = _serverConfigs[0];
+	// Récupérer le port local du socket (serveur sur lequel la connexion a été acceptée)
+	struct sockaddr_in local_addr;
+	socklen_t addrlen = sizeof(local_addr);
+	int local_port = 0;
+	if(getsockname(client_fd, (struct sockaddr*)&local_addr, &addrlen) == 0)
+		local_port = ntohs(local_addr.sin_port);
+	else
+		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] getsockname failed for fd %d", client_fd);
+	// Sélectionner le bon serveur (virtual host)
+	int serverIndex = 0;
+	if(!hostHeader.empty())
+	{
+		extern int ServerRouter_findServerIndex(const std::vector<Server>&, const std::string&, int);
+		serverIndex = ServerRouter::findServerIndex(_serverConfigs, hostHeader, local_port);
+		if(serverIndex < 0) serverIndex = 0;
+	}
+	const Server& server = _serverConfigs[serverIndex];
 	// Trouver la location correspondante (plus long préfixe)
 	const Location* matchedLocation = NULL;
 	size_t maxMatch = 0;
@@ -316,6 +350,14 @@ void EpollClasse::handleRequest(int client_fd)
 			matchedLocation = &(*it);
 			maxMatch = it->path.length();
 		}
+	}
+	// Gestion de la redirection HTTP (directive return)
+	if(matchedLocation && matchedLocation->return_code && !matchedLocation->return_url.empty())
+	{
+		std::string redirectResp = RedirectionHandler::generateRedirectReponse(matchedLocation->return_code, matchedLocation->return_url);
+		sendResponse(client_fd, redirectResp);
+		close(client_fd);
+		return;
 	}
 	// Vérification stricte des allow_methods
 	if(matchedLocation)
@@ -385,8 +427,42 @@ void EpollClasse::handleRequest(int client_fd)
 			return;
 		}
 	}
+	// Support de la méthode OPTIONS
+	if (method == "OPTIONS") {
+		std::string allowHeader = "Allow: ";
+		if (matchedLocation) {
+			for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i) {
+				if (i > 0) allowHeader += ", ";
+				allowHeader += matchedLocation->allow_methods[i];
+			}
+		} else {
+			for (size_t i = 0; i < server.allow_methods.size(); ++i) {
+				if (i > 0) allowHeader += ", ";
+				allowHeader += server.allow_methods[i];
+			}
+		}
+		std::ostringstream response;
+		response << "HTTP/1.1 204 No Content\r\n" << allowHeader << "\r\nContent-Length: 0\r\n\r\n";
+		sendResponse(client_fd, response.str());
+		close(client_fd);
+		return;
+	}
 	// Utiliser resolvePath pour obtenir le chemin réel
 	std::string resolvedPath = resolvePath(server, path);
+	// Sécurité : normaliser le chemin et vérifier qu'il reste dans le root/alias
+	std::string safeRoot = server.root;
+	if (matchedLocation && !matchedLocation->alias.empty())
+		safeRoot = matchedLocation->alias;
+	else if (matchedLocation && !matchedLocation->root.empty())
+		safeRoot = matchedLocation->root;
+	std::string normalized = normalizePath(resolvedPath);
+	std::string normalizedRoot = normalizePath(safeRoot);
+	if (normalized.find(normalizedRoot) != 0) {
+		Logger::logMsg(RED, CONSOLE_OUTPUT, "[SECURITY] Directory traversal detected: %s", resolvedPath.c_str());
+		sendErrorResponse(client_fd, 403, server);
+		close(client_fd);
+		return;
+	}
 	// get CGI param
 	size_t cgiPos = resolvedPath.rfind("?");
 	std::string cgiParam = "";
@@ -462,7 +538,7 @@ void EpollClasse::handleRequest(int client_fd)
 		}
 		else if(method == "POST")
 		{
-			handlePostRequest(client_fd, request, resolvedPath);
+			handlePostRequest(client_fd, request, resolvedPath, matchedLocation);
 		}
 		else if(method == "DELETE")
 		{
@@ -490,10 +566,34 @@ void EpollClasse::handleRequest(int client_fd)
 
 void EpollClasse::sendResponse(int client_fd, const std::string & response)
 {
+	// Ajout des headers obligatoires si absents
+	std::string resp = response;
+	if (resp.find("Date:") == std::string::npos) {
+		char datebuf[128];
+		time_t now = time(0);
+		struct tm tm;
+		gmtime_r(&now, &tm);
+		strftime(datebuf, sizeof(datebuf), "Date: %a, %d %b %Y %H:%M:%S GMT\r\n", &tm);
+		// Ajoute Date après le premier CRLF (après le status)
+		size_t pos = resp.find("\r\n");
+		if (pos != std::string::npos)
+			resp.insert(pos + 2, datebuf);
+	}
+	if (resp.find("Server:") == std::string::npos) {
+		size_t pos = resp.find("\r\n");
+		if (pos != std::string::npos)
+			resp.insert(pos + 2, "Server: LeWebServ/42.1\r\n");
+	}
+	if (resp.find("Connection:") == std::string::npos) {
+		size_t pos = resp.find("\r\n");
+		if (pos != std::string::npos)
+			resp.insert(pos + 2, "Connection: close\r\n");
+	}
+	// ...envoi comme avant...
 	size_t total_sent = 0;
-	while(total_sent < response.size())
+	while(total_sent < resp.size())
 	{
-		ssize_t sent = send(client_fd, response.c_str() + total_sent, response.size() - total_sent, 0);
+		ssize_t sent = send(client_fd, resp.c_str() + total_sent, resp.size() - total_sent, 0);
 		if(sent < 0)
 		{
 			if(errno == EAGAIN || errno == EWOULDBLOCK)
@@ -505,7 +605,7 @@ void EpollClasse::sendResponse(int client_fd, const std::string & response)
 	}
 }
 
-void EpollClasse::handlePostRequest(int client_fd, const std::string & request, const std::string & filePath)
+void EpollClasse::handlePostRequest(int client_fd, const std::string & request, const std::string & filePath, const Location* location)
 {
 	// Trouver le début du corps de la requête
 	size_t body_pos = request.find("\r\n\r\n");
@@ -516,8 +616,24 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string & request, 
 		return;
 	}
 	std::string body = request.substr(body_pos + 4);
+	std::string uploadPath = filePath;
+	if(location && !location->upload_path.empty())
+	{
+		// Si upload_path est un dossier, concatène le nom du fichier demandé
+		struct stat st;
+		if(stat(location->upload_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+		{
+			size_t lastSlash = filePath.find_last_of("/");
+			std::string filename = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) : filePath;
+			uploadPath = location->upload_path + "/" + filename;
+		}
+		else
+		{
+			uploadPath = location->upload_path;
+		}
+	}
 	// Créer ou écraser le fichier (POST doit créer le fichier s'il n'existe pas)
-	std::ofstream outFile(filePath.c_str());
+	std::ofstream outFile(uploadPath.c_str());
 	if(outFile)
 	{
 		outFile << body;
@@ -604,10 +720,11 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 				{
 					std::string content((std::istreambuf_iterator<char>(file)),
 					                    std::istreambuf_iterator<char>());
+					std::string mime = getMimeType(filePath);
 					std::ostringstream response;
 					response << "HTTP/1.1 200 OK\r\n"
 					         << setCookieHeader << "\r\n"
-					         << "Content-Type: text/html\r\n"
+					         << "Content-Type: " << mime << "\r\n"
 					         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
 					if(!isHead)
 						response << content;
@@ -667,10 +784,11 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 			{
 				std::string content((std::istreambuf_iterator<char>(file)),
 				                    std::istreambuf_iterator<char>());
+				std::string mime = getMimeType(filePath);
 				std::ostringstream response;
 				response << "HTTP/1.1 200 OK\r\n"
 				         << setCookieHeader << "\r\n"
-				         << "Content-Type: text/html\r\n"
+				         << "Content-Type: " << mime << "\r\n"
 				         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
 				if(!isHead)
 					response << content;

@@ -38,7 +38,7 @@ private:
 
     // Méthodes de gestion des requêtes HTTP
     void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies);
-    void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
+    void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Location* location = NULL);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);
     void sendErrorResponse(int client_fd, int code, const Server& server, const std::string& allowHeader = "");
