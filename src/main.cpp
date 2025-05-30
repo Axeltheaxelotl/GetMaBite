@@ -18,7 +18,6 @@ int main(int argc, char **argv)
         std::cerr << "Erreur : Impossible de charger la configuration." << std::endl;
         return 1;
     }
-
     // Convertir les objets Server en ServerConfig
     std::vector<ServerConfig> serverConfigs;
     for (std::vector<Server>::const_iterator it = servers.begin(); it != servers.end(); ++it)

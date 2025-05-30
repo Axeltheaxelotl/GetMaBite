@@ -332,6 +332,12 @@ void EpollClasse::handleRequest(int client_fd)
 	else
 		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] getsockname failed for fd %d", client_fd);
 	// Sélectionner le bon serveur (virtual host)
+	if(hostHeader.empty()) {
+		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Missing Host header on fd %d", client_fd);
+		sendErrorResponse(client_fd, 400, _serverConfigs[0]);
+		close(client_fd);
+		return;
+	}
 	int serverIndex = 0;
 	if(!hostHeader.empty())
 	{
