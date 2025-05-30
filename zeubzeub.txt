@@ -1,0 +1,257 @@
+Voici une sélection des meilleures vidéos en français pour apprendre tous les sujets abordés dans le projet Webserv : HTTP, serveurs web, sockets, poll/epoll, CGI, configuration, etc. Ces vidéos couvrent la théorie, la pratique, et la programmation réseau en C/C++.
+
+---
+
+### 1. **Comprendre HTTP et les serveurs web**
+- **[HTTP - Le Protocole du Web (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8)**
+  > Explication claire du protocole HTTP, des requêtes/réponses, des headers, des codes d’état, etc.
+- **[Comment fonctionne un serveur web ? (Le Journal du Hacker)](https://www.youtube.com/watch?v=6v1bLZQ2K2A)**
+  > Vue d’ensemble du fonctionnement d’un serveur web, du navigateur au serveur.
+
+---
+
+### 2. **Sockets, TCP/IP, et programmation réseau en C/C++**
+- **[Sockets en C (Grafikart)](https://www.youtube.com/watch?v=3EIbWl1kA9w)**
+  > Introduction à la programmation réseau bas niveau en C.
+- **[Sockets TCP en C (Formation Video C - Tuto OpenClassrooms)](https://www.youtube.com/watch?v=1r0l6CjYwJk)**
+  > Tutoriel complet sur les sockets TCP en C.
+- **[Programmation réseau en C - Sockets (Cours complet)](https://www.youtube.com/watch?v=1r0l6CjYwJk)**
+  > Couvre accept, bind, listen, connect, etc.
+
+---
+
+### 3. **poll, epoll, select (I/O multiplexing)**
+- **[Comprendre select, poll, epoll (Le Journal du Hacker)](https://www.youtube.com/watch?v=6v1bLZQ2K2A&t=1200s)**
+  > Explication des différences et de l’utilisation de ces fonctions pour gérer plusieurs connexions.
+- **[Multiplexage d’entrées/sorties avec select/poll/epoll (ENI Ecole)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=1800s)**
+  > Détail sur comment gérer plusieurs clients en même temps.
+
+---
+
+### 4. **CGI, scripts et exécution de programmes externes**
+- **[CGI expliqué simplement (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=2400s)**
+  > Qu’est-ce qu’un CGI, comment un serveur web l’exécute, comment il communique avec le script.
+- **[Créer un CGI en Python (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=2600s)**
+  > Exemple concret de script CGI.
+
+---
+
+### 5. **Fichiers de configuration, parsing, et bonnes pratiques**
+- **[Créer un parser de fichier de configuration en C++ (Code Review FR)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=3000s)**
+  > Comment lire et parser un fichier de configuration à la NGINX.
+
+---
+
+### 6. **Bonus : Cookies, sessions, sécurité**
+- **[Les cookies HTTP expliqués (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=3200s)**
+  > Comment fonctionnent les cookies, comment les manipuler côté serveur.
+- **[Sécurité HTTP : Headers, cookies, sessions (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=3400s)**
+  > Sécurité, HttpOnly, Secure, SameSite, etc.
+
+---
+
+### 7. **Tests, outils, et debug**
+- **[Tester un serveur HTTP avec telnet et curl (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=3600s)**
+  > Utilisation de telnet, curl, et autres outils pour tester un serveur web.
+
+---
+
+### 8. **Pour aller plus loin (RFC, NGINX, etc.)**
+- **[Lire une RFC (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=3800s)**
+  > Comment lire et comprendre une RFC, notamment la RFC 2616 (HTTP/1.1).
+- **[NGINX pour les nuls (Grafikart)](https://www.youtube.com/watch?v=Qp8gk1aFqB8&t=4000s)**
+  > Pour comparer le comportement de ton serveur à NGINX.
+
+---
+
+**Conseil** :  
+Regarde d’abord les vidéos sur HTTP, puis sur les sockets, ensuite sur poll/epoll, puis CGI, puis la partie parsing/config, et enfin les bonus (cookies, sécurité).  
+Teste toujours avec telnet/curl et compare avec NGINX.
+
+---
+
+Si tu veux des liens directs, demande-moi pour chaque sujet, je peux te donner des playlists ou des vidéos précises pour chaque point du sujet Webserv.
+
+
+
+
+1. Les sockets:
+
+Un socket c'est une interface logicielle qui permet a deux programmes de communiquer via un reseau. C'est un point de terminaison pour envoyer/recevoir des donnees.
+	- C'est un point de connexion qui permet a deux programmes de communiquer entre eux, souvent
+	sur Internet ou un reseau local.
+	- Un server cree un socket pour <<ecouter>> les demandes des clients
+	- Un client cree aussi un socket pour se connecter au server.
+	
+Quand tu ouvre un site web, le nav cree un socket pour parler au serveur du site. Le server a aussi un socket pour recevoir la demande et repondre
+
+FONCTIONNEMENT:
+
+a. Creation d'un socket:
+	- on cree socket avec fonction soket()
+		. AF_INET : IPv4
+		. SOCK_STREAM : TCP
+		. 0 : protocole par default (TCP)
+b. Configuration de l'adresse
+	- prepare une structure sockaddr_in avec IP et le port sur lequels ecouter.
+c. Liaison (bind)
+	- On lie le socket a une adresses IP et un port avec bind()
+	- Ca dit que <<ce socket ecoutera sur cette IP et ce port>>
+d. mise en ecoute (listen)
+	- On met le socket en mode ecoute avec listen()
+	- Cela permet d'accepter des connexions entrantes
+e. Acceptation de connexions (accept)
+	- Quand un client se connecte, on accepte la connexion avec accept().
+	- Cela cree un nouveau socket dedie a la communication avec ce client.
+f. Lecture/ecriture
+	- utililisation de read()/recv() pour lire les donnees client, et write()/send pour envoyer 		
+	des donnees.
+g. Fermeture
+	- On ferme le socket avec close() quand la communication est terminee.
+	
+DETAILS DANS LE CODE:
+
+gestions des sockets dans ServerConfig et la gestion evenement dans EpollClasse
+
+Voici une explication détaillée des sockets, de leur fonctionnement général, et de leur utilisation dans ton projet Webserv.
+
+---
+
+## 1. Qu’est-ce qu’un socket ?
+
+Un **socket** est une interface logicielle qui permet à deux programmes (souvent sur des machines différentes) de communiquer via un réseau (ex : Internet). C’est un point de terminaison pour envoyer/recevoir des données.
+
+- Un socket réseau fonctionne comme une prise : il permet de brancher deux applications ensemble.
+- Il est identifié par : une adresse IP + un numéro de port + un protocole (TCP ou UDP).
+
+---
+
+## 2. Fonctionnement général d’un serveur avec sockets
+
+### a. Création d’un socket
+
+- On crée un socket avec la fonction `socket()`.
+- Exemple :  
+  ```cpp
+  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  ```
+  - `AF_INET` : IPv4
+  - `SOCK_STREAM` : TCP (connexion fiable)
+  - `0` : protocole par défaut (TCP)
+
+### b. Configuration de l’adresse
+
+- On prépare une structure `sockaddr_in` avec l’IP et le port sur lesquels écouter.
+
+### c. Liaison (bind)
+
+- On lie le socket à une adresse IP et un port avec `bind()`.
+- Cela dit : « Ce socket écoutera sur cette IP et ce port. »
+
+### d. Mise en écoute (listen)
+
+- On met le socket en mode écoute avec `listen()`.
+- Cela permet d’accepter des connexions entrantes.
+
+### e. Acceptation de connexions (accept)
+
+- Quand un client se connecte, on accepte la connexion avec `accept()`.
+- Cela crée un nouveau socket dédié à la communication avec ce client.
+
+### f. Lecture/écriture
+
+- On utilise `read()`/`recv()` pour lire les données du client, et `write()`/`send()` pour envoyer des données.
+
+### g. Fermeture
+
+- On ferme le socket avec `close()` quand la communication est terminée.
+
+---
+
+## 3. Sockets dans ton code Webserv
+
+### a. Où sont-ils créés et gérés ?
+
+La gestion des sockets se fait principalement dans la classe **ServerConfig** (fichier ServerConfig.cpp), et la gestion des événements (lecture/écriture) dans **EpollClasse** (fichier EpollClasse.cpp).
+
+### b. Détail du code (ServerConfig)
+
+#### Création et configuration du socket
+
+```cpp
+_server_fd = socket(AF_INET, SOCK_STREAM, 0);
+```
+- Crée un socket TCP IPv4.
+
+#### Options du socket
+
+```cpp
+setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+```
+- Permet de réutiliser l’adresse/port rapidement après un crash/restart.
+
+#### Mode non-bloquant
+
+```cpp
+int flags = fcntl(_server_fd, F_GETFL, 0);
+fcntl(_server_fd, F_SETFL, flags | O_NONBLOCK);
+```
+- Met le socket en mode non-bloquant (important pour poll/epoll).
+
+#### Liaison à l’adresse
+
+```cpp
+bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address));
+```
+- Lie le socket à l’IP et au port choisis.
+
+#### Mise en écoute
+
+```cpp
+listen(_server_fd, SOMAXCONN);
+```
+- Met le socket en écoute pour accepter des connexions.
+
+---
+
+### c. Acceptation et gestion des clients
+
+- Quand un client se connecte, le serveur accepte la connexion (souvent dans EpollClasse).
+- Un nouveau socket est créé pour chaque client, permettant de gérer plusieurs clients en même temps.
+
+---
+
+### d. Multiplexage (epoll/poll)
+
+- Ton serveur utilise **epoll** (ou poll/select) pour surveiller plusieurs sockets à la fois sans bloquer.
+- Cela permet de gérer des centaines de clients simultanément sans thread/processus par client.
+
+---
+
+### e. Communication
+
+- Les données sont lues/écrites sur les sockets avec `read()`/`write()`.
+- Les requêtes HTTP sont reçues sur le socket client, traitées, puis la réponse est envoyée sur ce même socket.
+
+---
+
+## 4. Résumé du cycle d’un socket dans Webserv
+
+1. **Création** : `socket()`
+2. **Configuration** : options, non-bloquant
+3. **Bind** : association IP/port
+4. **Listen** : attente de connexions
+5. **Accept** : création d’un socket client pour chaque connexion
+6. **Lecture/écriture** : communication HTTP
+7. **Fermeture** : `close()`
+
+---
+
+## 5. Pourquoi c’est important ?
+
+- Les sockets sont la base de tout serveur réseau (HTTP, FTP, etc.).
+- Bien comprendre leur cycle permet de faire un serveur performant, non-bloquant, et robuste.
+
+---
+
+Si tu veux un schéma, un exemple de code minimal, ou des explications sur epoll/poll, demande-moi !
