@@ -40,7 +40,6 @@ void ServerConfig::setupServer()
         close(_server_fd);
     }
 
-    // AF_INET pour IPv4 et SOCK_STREAM pour TCP
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1)
     {

@@ -5,9 +5,6 @@
 
 void RequestBufferManager::append(int client_fd, const std::string& data) {
     buffers[client_fd] += data;
-    // Affiche seulement si le buffer devient grand (debug minimal)
-    if (buffers[client_fd].size() > 4096)
-        printf("[DEBUG] fd=%d, buffer_size=%zu\n", client_fd, buffers[client_fd].size());
 }
 
 std::string& RequestBufferManager::get(int client_fd) {
@@ -42,7 +39,9 @@ bool RequestBufferManager::isRequestComplete(int client_fd, const Server& server
             printf("[isRequestComplete] fd %d: body=\"%s\"\n", client_fd, buf.substr(body_start, body_received).c_str());
             if (body_received > (size_t)server.client_max_body_size) {
                 printf("[RequestBufferManager] Body size exceeds client_max_body_size\n");
-                return false;
+                // Envoie l'erreur 413 et ferme la connexion
+                // On ne retourne pas false, on signale l'erreur au serveur
+                return -1; // signal spécial pour 413
             }
             return body_received >= (size_t)content_length;
         }

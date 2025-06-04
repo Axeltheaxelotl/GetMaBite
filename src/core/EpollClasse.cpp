@@ -10,14 +10,44 @@
 #include<algorithm> // Ensure std::find is available
 #include"../utils/Logger.hpp"
 #include"../routes/AutoIndex.hpp"
+#include"../routes/RedirectionHandler.hpp"  // Include for return directive handling
 #include"../utils/Utils.hpp"
 #include"../http/RequestBufferManager.hpp"
 #include"../bonus_cookie/CookieManager.hpp"
+#include "../bonus_cookie/ParseCookie.hpp"
 #include"../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
-#include "../httpRouting/ServerRouter.hpp"
-#include "../routes/RedirectionHandler.hpp"
-#include <ctime>
+#include <map> // Include <map> and <algorithm> for utility implementations
+
+// Fonction utilitaire pour déterminer le type MIME selon l'extension
+static std::string getMimeType(const std::string& filename) {
+    size_t dot = filename.find_last_of('.');
+    if (dot == std::string::npos) {
+        return "application/octet-stream";
+    }
+    std::string ext = filename.substr(dot + 1);
+    // C++98-compatible static map initialization
+    static std::map<std::string, std::string> mimeMap;
+    if (mimeMap.empty()) {
+        mimeMap["html"] = "text/html";
+        mimeMap["htm"]  = "text/html";
+        mimeMap["css"]  = "text/css";
+        mimeMap["js"]   = "application/javascript";
+        mimeMap["json"] = "application/json";
+        mimeMap["png"]  = "image/png";
+        mimeMap["jpg"]  = "image/jpeg";
+        mimeMap["jpeg"] = "image/jpeg";
+        mimeMap["gif"]  = "image/gif";
+        mimeMap["ico"]  = "image/x-icon";
+        mimeMap["svg"]  = "image/svg+xml";
+        mimeMap["txt"]  = "text/plain";
+        mimeMap["pdf"]  = "application/pdf";
+        mimeMap["mp3"]  = "audio/mpeg";
+        mimeMap["mp4"]  = "video/mp4";
+    }
+    std::map<std::string, std::string>::const_iterator it = mimeMap.find(ext);
+    return (it != mimeMap.end()) ? it->second : "application/octet-stream";
+}
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -28,33 +58,33 @@ static std::string sizeToString(size_t value)
 }
 
 // Utilitaire pour joindre deux chemins sans double slash
-static std::string joinPath(const std::string& left, const std::string& right)
-{
-	if(left.empty()) return right;
-	if(right.empty()) return left;
-	if(left[left.size() - 1] == '/' && right[0] == '/')
-		return left + right.substr(1);
-	if(left[left.size() - 1] != '/' && right[0] != '/')
-		return left + "/" + right;
-	return left + right;
+static std::string joinPath(const std::string& left, const std::string& right) {
+    if (left.empty()) return right;
+    if (right.empty()) return left;
+    bool leftEnds = (left[left.size() - 1] == '/');
+    bool rightStarts = (!right.empty() && right[0] == '/');
+    if (leftEnds && rightStarts) {
+        return left + right.substr(1);
+    } else if (!leftEnds && !rightStarts) {
+        return left + "/" + right;
+    }
+    return left + right;
 }
 
 // Utilitaire pour éviter le doublon de dossier (ex: /tests/tests/)
-static std::string smartJoinRootAndPath(const std::string& root, const std::string& path)
-{
-	// netoie les slashes
-	std::string cleanRoot = root;
-	if(!cleanRoot.empty() && cleanRoot[cleanRoot.size() - 1] == '/')
-		cleanRoot = cleanRoot.substr(0, cleanRoot.size() - 1);
-	std::string cleanPath = path;
-	if(!cleanPath.empty() && cleanPath[0] == '/')
-		cleanPath = cleanPath.substr(1);
-	// Si le path commence déjà par le nom du dossier root, on ne le rajoute pas
-	size_t lastSlash = cleanRoot.find_last_of('/');
-	std::string rootDir = (lastSlash != std::string::npos) ? cleanRoot.substr(lastSlash + 1) : cleanRoot;
-	if(cleanPath.find(rootDir + "/") == 0)
-		return cleanRoot + "/" + cleanPath.substr(rootDir.length() + 1);
-	return cleanRoot + "/" + cleanPath;
+static std::string smartJoinRootAndPath(const std::string& root, const std::string& path) {
+    std::string cleanRoot = root;
+    if (!cleanRoot.empty() && cleanRoot[cleanRoot.size() - 1] == '/') {
+        cleanRoot.erase(cleanRoot.size() - 1, 1);
+    }
+    std::string cleanPath = path;
+    if (!cleanPath.empty() && cleanPath[0] == '/') {
+        cleanPath.erase(0, 1);
+    }
+    if (cleanRoot.empty()) {
+        return std::string("/") + cleanPath;
+    }
+    return cleanRoot + "/" + cleanPath;
 }
 
 // Constructeur
@@ -81,22 +111,29 @@ EpollClasse::~EpollClasse()
 // Configuration des serveurs
 void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vector<Server> &serverConfigs)
 {
-	Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Setting up servers...");
-	_servers = servers;
-	_serverConfigs = serverConfigs;
-	for(std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
-	{
-		it->setupServer();
-		Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created on %s:%d",
-		               it->getHost().c_str(), it->getPort());
-		// Log des informations de configuration
-		Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", _serverConfigs[0].root.c_str());
-		Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", _serverConfigs[0].index.c_str());
-		epoll_event event;
-		event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
-		event.data.fd = it->getFd();
-		addToEpoll(it->getFd(), event);
-	}
+    // Copy server configs and sanitize root paths
+    _servers = servers;
+    _serverConfigs = serverConfigs;
+    // Remove any trailing semicolon from root paths
+    for (std::vector<Server>::iterator sit = _serverConfigs.begin(); sit != _serverConfigs.end(); ++sit) {
+        if (!sit->root.empty() && sit->root[sit->root.size() - 1] == ';')
+            sit->root.erase(sit->root.size() - 1, 1);
+    }
+    Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Setting up servers...");
+    for(std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
+    {
+        it->setupServer();
+        Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created on %s:%d",
+                       it->getHost().c_str(), it->getPort());
+        // Log des informations de configuration
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", _serverConfigs[0].root.c_str());
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", _serverConfigs[0].index.c_str());
+        epoll_event event;
+        event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
+        event.data.fd = it->getFd();
+        addToEpoll(it->getFd(), event);
+        _serverPorts[it->getFd()] = it->getPort();  // Track listening port for each server socket
+    }
 }
 
 // Boucle principale
@@ -138,6 +175,7 @@ void EpollClasse::serverRun()
 			epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL); // Remove client from epoll
 			close(*it);
 			timeoutManager.removeClient(*it); // Remove client from timeout manager
+			_bufferManager.remove(*it); // <-- Remove buffer on timeout
 		}
 	}
 }
@@ -203,6 +241,8 @@ void EpollClasse::acceptConnection(int server_fd)
 	event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
 	event.data.fd = client_fd;
 	addToEpoll(client_fd, event);
+	// Track which listening port this client is on
+	_clientPorts[client_fd] = _serverPorts[server_fd];
 	Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "\n==================== Nouvelle connexion ====================\n[+] Client connecté depuis %s:%d\n===========================================================", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 }
 
@@ -212,11 +252,11 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 	// Si le chemin demandé est la racine, renvoyer le fichier index
 	if(requestedPath == "/")
 	{
-		// Si index est déjà un chemin absolu, le retourner directement
-		if(!server.index.empty() && server.index[0] == '/')
-			return server.index;
-		// Sinon, concaténer root + index proprement
-		return joinPath(server.root, server.index);
+		std::string indexFile = server.index.empty() ? "index.html" : server.index;
+		std::string root = server.root;
+		if (!root.empty() && root[root.size() - 1] == '/')
+			root = root.substr(0, root.size() - 1);
+		return root + "/" + indexFile;
 	}
 	// Pour tout autre chemin, vérifier si une location correspond
 	for(std::vector<Location>::const_iterator it = server.locations.begin();
@@ -227,15 +267,56 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 			// Si un alias est défini, l'utiliser
 			if(!it->alias.empty())
 			{
-				return joinPath(it->alias, requestedPath);
+				std::string alias = it->alias;
+				if (!alias.empty() && alias[alias.size() - 1] == '/')
+					alias = alias.substr(0, alias.size() - 1);
+				// On retire le préfixe de la location
+				std::string relative = requestedPath.substr(it->path.length());
+				if (!relative.empty() && relative[0] == '/')
+					relative = relative.substr(1);
+				return alias + (relative.empty() ? "" : "/" + relative);
 			}
 			// Sinon utiliser le root de la location ou du serveur
 			std::string root = !it->root.empty() ? it->root : server.root;
-			return smartJoinRootAndPath(root, requestedPath.substr(1));
+			if (!root.empty() && root[root.size() - 1] == '/')
+				root = root.substr(0, root.size() - 1);
+			// Si le chemin demandé est exactement la location (ex: /test/), renvoyer index
+			if (requestedPath == it->path && !it->index.empty())
+				return root + "/" + it->index;
+			else if (requestedPath == it->path)
+				return root + "/index.html";
+			// Correction : retirer le préfixe de la location
+			std::string relative = requestedPath.substr(it->path.length());
+			if (!relative.empty() && relative[0] == '/')
+				relative = relative.substr(1);
+			return root + (relative.empty() ? "" : "/" + relative);
 		}
 	}
 	// Si aucune location ne correspond, utiliser le root du serveur
-	return smartJoinRootAndPath(server.root, requestedPath);
+	std::string root = server.root;
+	if (!root.empty() && root[root.size() - 1] == '/')
+		root = root.substr(0, root.size() - 1);
+	std::string relative = requestedPath;
+	if (!relative.empty() && relative[0] == '/')
+		relative = relative.substr(1);
+	// Si root se termine par le même segment que le début de relative, on l'enlève pour éviter duplication (ex: tests/tests)
+	size_t slashPos = relative.find('/');
+	std::string firstSeg;
+	if (slashPos != std::string::npos)
+		firstSeg = relative.substr(0, slashPos);
+	else
+		firstSeg = relative;
+	if (!firstSeg.empty() && root.size() >= firstSeg.size() + 1
+		&& root.compare(root.size() - firstSeg.size(), firstSeg.size(), firstSeg) == 0)
+	{
+		// Drop firstSeg and following slash
+		if (slashPos != std::string::npos)
+			relative = relative.substr(slashPos + 1);
+		else
+			relative.clear();
+	}
+	// Use smart join to avoid duplicating folder name (e.g., tests/tests)
+	return smartJoinRootAndPath(root, relative);
 }
 
 void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request)
@@ -262,26 +343,24 @@ void EpollClasse::handleRequest(int client_fd)
 		}
 		close(client_fd);
 		timeoutManager.removeClient(client_fd);
+		_bufferManager.remove(client_fd); // <-- Remove buffer on disconnect
 		return;
 	}
 	buffer[bytes_read] = '\0';
 	_bufferManager.append(client_fd, std::string(buffer, bytes_read));
 	Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
-	// Parse la méthode HTTP AVANT de vérifier la taille du body
-	std::string temp_request = _bufferManager.get(client_fd);
-	std::istringstream tempStream(temp_request);
-	std::string temp_method;
-	tempStream >> temp_method;
-	// Vérifie la taille du body UNIQUEMENT pour POST/PUT/PATCH
 	if(!_bufferManager.isRequestComplete(client_fd, _serverConfigs[0]))
 	{
-		if ((temp_method == "POST" || temp_method == "PUT" || temp_method == "PATCH") &&
-			_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size)
+		if(_bufferManager.get(client_fd).size() > (size_t)_serverConfigs[0].client_max_body_size)
 		{
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Request too large for fd %d", client_fd);
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Request size: %zu bytes", _bufferManager.get(client_fd).size());
 			Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Max body size: %d bytes", _serverConfigs[0].client_max_body_size);
+			Logger::logMsg(FUCK_YOU, CONSOLE_OUTPUT, "YOU DUMB FUCK, THE REQUEST SIZE DOES NOT RESET AND GETS ADDED UP AT EVERY REQUEST");
 			sendErrorResponse(client_fd, 413, _serverConfigs[0]);
+			close(client_fd);
+			timeoutManager.removeClient(client_fd);
+			_bufferManager.remove(client_fd); // <-- Remove buffer on error
 			return;
 		}
 	}
@@ -294,58 +373,39 @@ void EpollClasse::handleRequest(int client_fd)
 	requestStream >> method >> path >> protocol;
 	if(path.empty())
 		path = "/";
-	// Vérification stricte de la requête HTTP (400 Bad Request)
-	if (method.empty() || path.empty() || protocol.empty() || protocol.find("HTTP/") != 0) {
-		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Malformed HTTP request on fd %d", client_fd);
-		sendErrorResponse(client_fd, 400, _serverConfigs[0]); // Use default server config
-		close(client_fd);
-		return;
-	}
 	// Extraction des headers pour trouver Host et Cookie
-	std::string line;
 	std::string hostHeader;
-	std::map<std::string, std::string> cookies;
-	while(std::getline(requestStream, line) && line != "\r")
-	{
-		if(line.find("Host:") == 0)
-		{
-			hostHeader = line.substr(5); // après "Host:"
-			while(!hostHeader.empty() && (hostHeader[0] == ' ' || hostHeader[0] == '\t')) hostHeader.erase(0, 1);
-			// Enlever le port si présent dans Host
-			size_t colon = hostHeader.find(":");
-			if(colon != std::string::npos)
-				hostHeader = hostHeader.substr(0, colon);
-		}
-		if(line.find("Cookie:") == 0)
-		{
-			std::string cookieHeader = line.substr(7); // après "Cookie:"
-			while(!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
-			cookies = CookieManager::parseCookies(cookieHeader);
-		}
-	}
-	// Récupérer le port local du socket (serveur sur lequel la connexion a été acceptée)
-	struct sockaddr_in local_addr;
-	socklen_t addrlen = sizeof(local_addr);
-	int local_port = 0;
-	if(getsockname(client_fd, (struct sockaddr*)&local_addr, &addrlen) == 0)
-		local_port = ntohs(local_addr.sin_port);
-	else
-		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] getsockname failed for fd %d", client_fd);
-	// Sélectionner le bon serveur (virtual host)
-	if(hostHeader.empty()) {
-		Logger::logMsg(RED, CONSOLE_OUTPUT, "[handleRequest] Missing Host header on fd %d", client_fd);
-		sendErrorResponse(client_fd, 400, _serverConfigs[0]);
-		close(client_fd);
-		return;
-	}
-	int serverIndex = 0;
-	if(!hostHeader.empty())
-	{
-		extern int ServerRouter_findServerIndex(const std::vector<Server>&, const std::string&, int);
-		serverIndex = ServerRouter::findServerIndex(_serverConfigs, hostHeader, local_port);
-		if(serverIndex < 0) serverIndex = 0;
-	}
-	const Server& server = _serverConfigs[serverIndex];
+    int reqPort = -1;
+    // Extraction des headers pour trouver Host et Cookie
+    std::string line;
+    std::map<std::string, std::string> cookies;
+    while(std::getline(requestStream, line) && line != "\r")
+    {
+        if(line.find("Host:") == 0)
+        {
+            std::string value = line.substr(5);
+            while(!value.empty() && (value[0] == ' ' || value[0] == '\t')) value.erase(0, 1);
+            size_t colon = value.find(':');
+            if(colon != std::string::npos)
+            {
+                reqPort = std::atoi(value.substr(colon + 1).c_str());
+                value = value.substr(0, colon);
+            }
+            hostHeader = value;
+            continue;
+        }
+        if(line.find("Cookie:") == 0)
+        {
+            std::string cookieHeader = line.substr(7); // après "Cookie:"
+            // Trim
+            while(!cookieHeader.empty() && (cookieHeader[0] == ' ' || cookieHeader[0] == '\t')) cookieHeader.erase(0, 1);
+            cookies = parseCookieHeader(cookieHeader);
+        }
+    }
+	// Sélectionner le bon serveur en fonction du Host:port (virtual hosting)
+	int listenPort = (reqPort != -1 ? reqPort : _clientPorts[client_fd]);
+	int idx = findMatchingServer(hostHeader, listenPort);
+	const Server& server = _serverConfigs[(idx >= 0 ? idx : 0)];
 	// Trouver la location correspondante (plus long préfixe)
 	const Location* matchedLocation = NULL;
 	size_t maxMatch = 0;
@@ -357,118 +417,75 @@ void EpollClasse::handleRequest(int client_fd)
 			maxMatch = it->path.length();
 		}
 	}
-	// Gestion de la redirection HTTP (directive return)
-	if(matchedLocation && matchedLocation->return_code && !matchedLocation->return_url.empty())
-	{
-		std::string redirectResp = RedirectionHandler::generateRedirectReponse(matchedLocation->return_code, matchedLocation->return_url);
-		sendResponse(client_fd, redirectResp);
-		close(client_fd);
-		return;
-	}
 	// Vérification stricte des allow_methods
-	if(matchedLocation)
+	std::vector<std::string> allowed_methods;
+	if (matchedLocation) {
+		allowed_methods = matchedLocation->allow_methods;
+		if (allowed_methods.empty())
+			allowed_methods = server.allow_methods;
+	} else {
+		allowed_methods = server.allow_methods;
+	}
+	if (allowed_methods.empty()) {
+		allowed_methods.push_back("GET");
+		allowed_methods.push_back("POST");
+		allowed_methods.push_back("DELETE");
+	}
+	bool allowed = false;
+	for(size_t i = 0; i < allowed_methods.size(); ++i)
 	{
-		bool allowed = false;
-		for(size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+		if(allowed_methods[i] == method)
 		{
-			if(matchedLocation->allow_methods[i] == method)
-			{
-				allowed = true;
-				break;
-			}
-		}
-		if(!allowed)
-		{
-			// Générer la liste des méthodes autorisées
-			std::string allowHeader = "Allow: ";
-			for(size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-			{
-				if(i > 0) allowHeader += ", ";
-				allowHeader += matchedLocation->allow_methods[i];
-			}
-			std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-			std::ostringstream response;
-			response << "HTTP/1.1 405 Method Not Allowed\r\n"
-			         << allowHeader << "\r\n"
-			         << "Content-Type: text/html\r\n"
-			         << "Content-Length: " << body.size() << "\r\n"
-			         << "\r\n"
-			         << body;
-			sendResponse(client_fd, response.str());
-			close(client_fd);
-			return;
+			allowed = true;
+			break;
 		}
 	}
-	else
+	if(!allowed)
 	{
-		// Si aucune location ne matche, vérifier allow_methods du server
-		bool allowed = false;
-		for(size_t i = 0; i < server.allow_methods.size(); ++i)
-		{
-			if(server.allow_methods[i] == method)
-			{
-				allowed = true;
-				break;
-			}
-		}
-		if(!allowed)
-		{
-			// Générer la liste des méthodes autorisées
-			std::string allowHeader = "Allow: ";
-			for(size_t i = 0; i < server.allow_methods.size(); ++i)
-			{
-				if(i > 0) allowHeader += ", ";
-				allowHeader += server.allow_methods[i];
-			}
-			std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-			std::ostringstream response;
-			response << "HTTP/1.1 405 Method Not Allowed\r\n"
-			         << allowHeader << "\r\n"
-			         << "Content-Type: text/html\r\n"
-			         << "Content-Length: " << body.size() << "\r\n"
-			         << "\r\n"
-			         << body;
-			sendResponse(client_fd, response.str());
-			close(client_fd);
-			return;
-		}
-	}
-	// Support de la méthode OPTIONS
-	if (method == "OPTIONS") {
+		// Générer la liste des méthodes autorisées
 		std::string allowHeader = "Allow: ";
-		if (matchedLocation) {
-			for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i) {
-				if (i > 0) allowHeader += ", ";
-				allowHeader += matchedLocation->allow_methods[i];
-			}
-		} else {
-			for (size_t i = 0; i < server.allow_methods.size(); ++i) {
-				if (i > 0) allowHeader += ", ";
-				allowHeader += server.allow_methods[i];
-			}
+		for(size_t i = 0; i < allowed_methods.size(); ++i)
+		{
+			if(i > 0) allowHeader += ", ";
+			allowHeader += allowed_methods[i];
 		}
+		std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
 		std::ostringstream response;
-		response << "HTTP/1.1 204 No Content\r\n" << allowHeader << "\r\nContent-Length: 0\r\n\r\n";
+		response << "HTTP/1.1 405 Method Not Allowed\r\n"
+		         << allowHeader << "\r\n"
+		         << "Content-Type: text/html\r\n"
+		         << "Content-Length: " << body.size() << "\r\n"
+		         << "\r\n"
+		         << body;
 		sendResponse(client_fd, response.str());
 		close(client_fd);
+		timeoutManager.removeClient(client_fd);
+		_bufferManager.remove(client_fd); // <-- Remove buffer on 405 error
 		return;
 	}
+	// Handle return directive configured in location
+    if (matchedLocation && matchedLocation->return_code != 0)
+    {
+        int code = matchedLocation->return_code;
+        if (code >= 300 && code < 400)
+        {
+            // Redirection
+            std::string url = matchedLocation->return_url;
+            std::string response = RedirectionHandler::generateRedirectReponse(code, url);
+            sendResponse(client_fd, response);
+        }
+        else
+        {
+            // Return error
+            sendErrorResponse(client_fd, code, server);
+        }
+        close(client_fd);
+        timeoutManager.removeClient(client_fd);
+        _bufferManager.remove(client_fd);
+        return;
+    }
 	// Utiliser resolvePath pour obtenir le chemin réel
 	std::string resolvedPath = resolvePath(server, path);
-	// Sécurité : normaliser le chemin et vérifier qu'il reste dans le root/alias
-	std::string safeRoot = server.root;
-	if (matchedLocation && !matchedLocation->alias.empty())
-		safeRoot = matchedLocation->alias;
-	else if (matchedLocation && !matchedLocation->root.empty())
-		safeRoot = matchedLocation->root;
-	std::string normalized = normalizePath(resolvedPath);
-	std::string normalizedRoot = normalizePath(safeRoot);
-	if (normalized.find(normalizedRoot) != 0) {
-		Logger::logMsg(RED, CONSOLE_OUTPUT, "[SECURITY] Directory traversal detected: %s", resolvedPath.c_str());
-		sendErrorResponse(client_fd, 403, server);
-		close(client_fd);
-		return;
-	}
 	// get CGI param
 	size_t cgiPos = resolvedPath.rfind("?");
 	std::string cgiParam = "";
@@ -484,18 +501,17 @@ void EpollClasse::handleRequest(int client_fd)
 	if(::stat(resolvedPath.c_str(), &file_stat) == 0)
 	{
 		size_t cgiPos = resolvedPath.rfind(".cgi.");
+		std::string extension;
 		if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
+			extension = resolvedPath.substr(cgiPos + 4); // +4 pour ".cgi"
+		std::map<std::string, std::string> cgi_handlers;
+		if(!extension.empty())
 		{
-			// Get the extension part after ".cgi."
-			std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
-			// Find the matching location and check if the extension is supported
-			Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
-			std::map<std::string, std::string> cgi_handlers;
 			// First check the matched location (if we have one)
 			if(matchedLocation)
 			{
 				std::map<std::string, std::string>::const_iterator cgiIt =
-				    matchedLocation->cgi_extensions.find(extension);
+					matchedLocation->cgi_extensions.find(extension);
 				if(cgiIt != matchedLocation->cgi_extensions.end())
 				{
 					cgi_handlers[extension + "_location"] = cgiIt->second;
@@ -504,21 +520,17 @@ void EpollClasse::handleRequest(int client_fd)
 			}
 			// Check all server-wide locations (collect all matches)
 			for(std::vector<Location>::const_iterator locIt = server.locations.begin();
-			        locIt != server.locations.end(); ++locIt)
+					locIt != server.locations.end(); ++locIt)
 			{
 				std::map<std::string, std::string>::const_iterator cgiIt =
-				    locIt->cgi_extensions.find(extension);
+					locIt->cgi_extensions.find(extension);
 				if(cgiIt != locIt->cgi_extensions.end())
-				{
-					// Use a unique key by appending the location path
-					cgi_handlers[extension + "_" + locIt->path] = cgiIt->second;
 					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in location %s: %s",
-					               locIt->path.c_str(), cgiIt->second.c_str());
-				}
+								   locIt->path.c_str(), cgiIt->second.c_str());
 			}
 			// Check server-wide CGI extensions
 			std::map<std::string, std::string>::const_iterator serverCgiIt =
-			    server.cgi_extensions.find(extension);
+				server.cgi_extensions.find(extension);
 			if(serverCgiIt != server.cgi_extensions.end())
 			{
 				cgi_handlers[extension] = serverCgiIt->second;
@@ -544,11 +556,18 @@ void EpollClasse::handleRequest(int client_fd)
 		}
 		else if(method == "POST")
 		{
-			handlePostRequest(client_fd, request, resolvedPath, matchedLocation);
+			handlePostRequest(client_fd, request, resolvedPath);
 		}
 		else if(method == "DELETE")
 		{
 			handleDeleteRequest(client_fd, resolvedPath);
+		}
+		else if(method == "PUT")
+		{
+			std::string uploadPath;
+			if(matchedLocation && !matchedLocation->upload_path.empty())
+				uploadPath = matchedLocation->upload_path;
+			handlePutRequest(client_fd, request, resolvedPath, uploadPath);
 		}
 		else
 		{
@@ -572,34 +591,10 @@ void EpollClasse::handleRequest(int client_fd)
 
 void EpollClasse::sendResponse(int client_fd, const std::string & response)
 {
-	// Ajout des headers obligatoires si absents
-	std::string resp = response;
-	if (resp.find("Date:") == std::string::npos) {
-		char datebuf[128];
-		time_t now = time(0);
-		struct tm tm;
-		gmtime_r(&now, &tm);
-		strftime(datebuf, sizeof(datebuf), "Date: %a, %d %b %Y %H:%M:%S GMT\r\n", &tm);
-		// Ajoute Date après le premier CRLF (après le status)
-		size_t pos = resp.find("\r\n");
-		if (pos != std::string::npos)
-			resp.insert(pos + 2, datebuf);
-	}
-	if (resp.find("Server:") == std::string::npos) {
-		size_t pos = resp.find("\r\n");
-		if (pos != std::string::npos)
-			resp.insert(pos + 2, "Server: LeWebServ/42.1\r\n");
-	}
-	if (resp.find("Connection:") == std::string::npos) {
-		size_t pos = resp.find("\r\n");
-		if (pos != std::string::npos)
-			resp.insert(pos + 2, "Connection: close\r\n");
-	}
-	// ...envoi comme avant...
 	size_t total_sent = 0;
-	while(total_sent < resp.size())
+	while(total_sent < response.size())
 	{
-		ssize_t sent = send(client_fd, resp.c_str() + total_sent, resp.size() - total_sent, 0);
+		ssize_t sent = send(client_fd, response.c_str() + total_sent, response.size() - total_sent, 0);
 		if(sent < 0)
 		{
 			if(errno == EAGAIN || errno == EWOULDBLOCK)
@@ -611,49 +606,90 @@ void EpollClasse::sendResponse(int client_fd, const std::string & response)
 	}
 }
 
-void EpollClasse::handlePostRequest(int client_fd, const std::string & request, const std::string & filePath, const Location* location)
+void EpollClasse::handlePostRequest(int client_fd, const std::string & request, const std::string &filePath)
 {
-	// Trouver le début du corps de la requête
-	size_t body_pos = request.find("\r\n\r\n");
-	if(body_pos == std::string::npos)
-	{
-		sendErrorResponse(client_fd, 400, _serverConfigs[0]);
-		close(client_fd);
-		return;
-	}
-	std::string body = request.substr(body_pos + 4);
-	std::string uploadPath = filePath;
-	if(location && !location->upload_path.empty())
-	{
-		// Si upload_path est un dossier, concatène le nom du fichier demandé
-		struct stat st;
-		if(stat(location->upload_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-		{
-			size_t lastSlash = filePath.find_last_of("/");
-			std::string filename = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) : filePath;
-			uploadPath = location->upload_path + "/" + filename;
-		}
-		else
-		{
-			uploadPath = location->upload_path;
-		}
-	}
-	// Créer ou écraser le fichier (POST doit créer le fichier s'il n'existe pas)
-	std::ofstream outFile(uploadPath.c_str());
-	if(outFile)
-	{
-		outFile << body;
-		outFile.close();
-		std::string response = "HTTP/1.1 201 Created\r\n"
-		                       "Content-Type: text/html\r\n\r\n"
-		                       "<html><body><h1>201 Created</h1></body></html>";
-		sendResponse(client_fd, response);
-	}
-	else
-	{
-		sendErrorResponse(client_fd, 403, _serverConfigs[0]);
-	}
-	close(client_fd);
+    // Trouver le début du corps de la requête
+    size_t body_pos = request.find("\r\n\r\n");
+    if(body_pos == std::string::npos)
+    {
+        sendErrorResponse(client_fd, 400, _serverConfigs[0]);
+        close(client_fd);
+        return;
+    }
+    std::string headers = request.substr(0, body_pos);
+    std::string body = request.substr(body_pos + 4);
+    // Chercher la location correspondante pour upload_path
+    std::string uploadPath;
+    const Server& server = _serverConfigs[0];
+    for(std::vector<Location>::const_iterator it = server.locations.begin(); it != server.locations.end(); ++it)
+    {
+        if(filePath.find(it->path) == 0 && !it->upload_path.empty())
+        {
+            uploadPath = it->upload_path;
+            break;
+        }
+    }
+    std::string targetPath = filePath;
+    if (!uploadPath.empty()) {
+        size_t lastSlash = filePath.find_last_of("/");
+        std::string filename = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) : filePath;
+        targetPath = joinPath(uploadPath, filename);
+    }
+    // Vérifier si multipart/form-data
+    size_t ct_pos = headers.find("Content-Type: multipart/form-data;");
+    if (ct_pos != std::string::npos) {
+        // Extraire la boundary
+        size_t bpos = headers.find("boundary=", ct_pos);
+        if (bpos != std::string::npos) {
+            std::string boundary = "--" + headers.substr(bpos + 9);
+            // Chercher la section du fichier
+            size_t part_start = body.find(boundary);
+            while (part_start != std::string::npos) {
+                part_start += boundary.length();
+                if (body.substr(part_start, 2) == "--") break; // fin du multipart
+                if (body.substr(part_start, 2) == "\r\n") part_start += 2;
+                size_t disp = body.find("Content-Disposition: form-data;", part_start);
+                if (disp == std::string::npos) break;
+                size_t filename_pos = body.find("filename=\"", disp);
+                if (filename_pos == std::string::npos) break;
+                size_t header_end = body.find("\r\n\r\n", filename_pos);
+                if (header_end == std::string::npos) break;
+                size_t file_start = header_end + 4;
+                size_t file_end = body.find(boundary, file_start);
+                if (file_end == std::string::npos) break;
+                // Enlever le CRLF final
+                if (file_end > 2 && body[file_end-2] == '\r' && body[file_end-1] == '\n')
+                    file_end -= 2;
+                std::ofstream outFile(targetPath.c_str(), std::ios::binary);
+                if(outFile) {
+                    outFile.write(body.c_str() + file_start, file_end - file_start);
+                    outFile.close();
+                    std::string response = "HTTP/1.1 201 Created\r\nContent-Type: text/html\r\n\r\n<html><body><h1>201 Created</h1></body></html>";
+                    sendResponse(client_fd, response);
+                } else {
+                    sendErrorResponse(client_fd, 403, _serverConfigs[0]);
+                }
+                close(client_fd);
+                return;
+            }
+        }
+    }
+    // Sinon, mode texte brut
+    std::ofstream outFile(targetPath.c_str());
+    if(outFile)
+    {
+        outFile << body;
+        outFile.close();
+        std::string response = "HTTP/1.1 201 Created\r\n"
+                               "Content-Type: text/html\r\n\r\n"
+                               "<html><body><h1>201 Created</h1></body></html>";
+        sendResponse(client_fd, response);
+    }
+    else
+    {
+        sendErrorResponse(client_fd, 403, _serverConfigs[0]);
+    }
+    close(client_fd);
 }
 
 void EpollClasse::handleDeleteRequest(int client_fd, const std::string & filePath)
@@ -670,11 +706,47 @@ void EpollClasse::handleDeleteRequest(int client_fd, const std::string & filePat
 	close(client_fd);
 }
 
+void EpollClasse::handlePutRequest(int client_fd, const std::string &request, const std::string &filePath, const std::string &uploadPath)
+{
+    // Trouver le début du corps de la requête
+    size_t body_pos = request.find("\r\n\r\n");
+    if(body_pos == std::string::npos)
+    {
+        sendErrorResponse(client_fd, 400, _serverConfigs[0]);
+        close(client_fd);
+        return;
+    }
+    std::string body = request.substr(body_pos + 4);
+    std::string targetPath = filePath;
+    if (!uploadPath.empty()) {
+        // Si upload_path est défini, on écrit dans ce dossier avec le nom du fichier demandé
+        size_t lastSlash = filePath.find_last_of("/");
+        std::string filename = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) : filePath;
+        targetPath = joinPath(uploadPath, filename);
+    }
+    std::ofstream outFile(targetPath.c_str());
+    if(outFile)
+    {
+        outFile << body;
+        outFile.close();
+        std::string response = "HTTP/1.1 201 Created\r\n"
+                               "Content-Type: text/html\r\n\r\n"
+                               "<html><body><h1>201 Created</h1></body></html>";
+        sendResponse(client_fd, response);
+    }
+    else
+    {
+        sendErrorResponse(client_fd, 403, _serverConfigs[0]);
+    }
+    close(client_fd);
+}
+
 // Gérer les erreurs
 void EpollClasse::handleError(int fd)
 {
 	Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD: %d", fd);
 	close(fd);
+	_bufferManager.remove(fd); // <-- Remove buffer on error
 }
 
 // Définir un FD en mode non bloquant
@@ -726,11 +798,10 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 				{
 					std::string content((std::istreambuf_iterator<char>(file)),
 					                    std::istreambuf_iterator<char>());
-					std::string mime = getMimeType(filePath);
 					std::ostringstream response;
 					response << "HTTP/1.1 200 OK\r\n"
 					         << setCookieHeader << "\r\n"
-					         << "Content-Type: " << mime << "\r\n"
+					         << "Content-Type: text/html\r\n"
 					         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
 					if(!isHead)
 						response << content;
@@ -738,13 +809,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 				}
 				else
 				{
-					std::string errorContent = ErreurDansTaGrosseDaronne(403);
-					std::string response = "HTTP/1.1 403 Forbidden\r\n"
-					                       + setCookieHeader + "\r\n"
-					                       + "Content-Type: text/html\r\n"
-					                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-					                       + errorContent;
-					sendResponse(client_fd, response);
+					sendErrorResponse(client_fd, 403, server);
 				}
 			}
 			else
@@ -772,13 +837,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 				}
 				else
 				{
-					std::string errorContent = ErreurDansTaGrosseDaronne(403);
-					std::string response = "HTTP/1.1 403 Forbidden\r\n"
-					                       + setCookieHeader + "\r\n"
-					                       + "Content-Type: text/html\r\n"
-					                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-					                       + errorContent;
-					sendResponse(client_fd, response);
+					sendErrorResponse(client_fd, 403, server);
 				}
 			}
 		}
@@ -790,11 +849,11 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 			{
 				std::string content((std::istreambuf_iterator<char>(file)),
 				                    std::istreambuf_iterator<char>());
-				std::string mime = getMimeType(filePath);
+				std::string mimeType = getMimeType(filePath);
 				std::ostringstream response;
 				response << "HTTP/1.1 200 OK\r\n"
 				         << setCookieHeader << "\r\n"
-				         << "Content-Type: " << mime << "\r\n"
+				         << "Content-Type: " << mimeType << "\r\n"
 				         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
 				if(!isHead)
 					response << content;
@@ -802,36 +861,18 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string & filePath, 
 			}
 			else
 			{
-				std::string errorContent = ErreurDansTaGrosseDaronne(403);
-				std::string response = "HTTP/1.1 403 Forbidden\r\n"
-				                       + setCookieHeader + "\r\n"
-				                       + "Content-Type: text/html\r\n"
-				                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-				                       + errorContent;
-				sendResponse(client_fd, response);
+				sendErrorResponse(client_fd, 403, server);
 			}
 		}
 		else
 		{
 			// Ni fichier ni dossier
-			std::string errorContent = ErreurDansTaGrosseDaronne(404);
-			std::string response = "HTTP/1.1 404 Not Found\r\n"
-			                       + setCookieHeader + "\r\n"
-			                       + "Content-Type: text/html\r\n"
-			                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-			                       + errorContent;
-			sendResponse(client_fd, response);
+			sendErrorResponse(client_fd, 404, server);
 		}
 	}
 	else
 	{
-		std::string errorContent = ErreurDansTaGrosseDaronne(404);
-		std::string response = "HTTP/1.1 404 Not Found\r\n"
-		                       + setCookieHeader + "\r\n"
-		                       + "Content-Type: text/html\r\n"
-		                       + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-		                       + errorContent;
-		sendResponse(client_fd, response);
+		sendErrorResponse(client_fd, 404, server);
 	}
 	close(client_fd);
 }
@@ -842,27 +883,46 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server & serv
 	std::string body;
 	std::string status = StatusCodeString(code);
 	std::string contentType = "text/html";
-	std::string customPath;
 	std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+	bool found = false;
 	if(it != server.error_pages.end())
 	{
-		// On tente de lire le fichier d'erreur personnalisé
-		std::ifstream file(it->second.c_str());
+		// Try opening configured error page under server root or relative to CWD
+		std::string errorPath = it->second;
+		if (!errorPath.empty() && errorPath[0] == '/')
+			errorPath = errorPath.substr(1);
+		std::string root = server.root;
+		if (!root.empty() && root[root.size() - 1] == '/')
+			root = root.substr(0, root.size() - 1);
+		std::vector<std::string> candidates;
+		candidates.push_back(root + "/" + errorPath);
+		candidates.push_back(errorPath);
+		for (size_t i = 0; i < candidates.size() && !found; ++i) {
+			std::ifstream file(candidates[i].c_str());
+			if (file.is_open()) {
+				std::ostringstream ss;
+				ss << file.rdbuf();
+				body = ss.str();
+				file.close();
+				found = true;
+			}
+		}
+	}
+	if (!found) {
+		// Essayer www/errors/<code>.html
+		std::ostringstream path;
+		path << "www/errors/" << code << ".html";
+		std::ifstream file(path.str().c_str());
 		if(file.is_open())
 		{
 			std::ostringstream ss;
 			ss << file.rdbuf();
 			body = ss.str();
 			file.close();
-		}
-		else
-		{
-			// Fichier non trouvé, fallback sur la page par défaut
-			body = ErreurDansTaGrosseDaronne(code);
+			found = true;
 		}
 	}
-	else
-	{
+	if (!found) {
 		body = ErreurDansTaGrosseDaronne(code);
 	}
 	std::ostringstream response;

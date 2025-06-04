@@ -2,9 +2,6 @@
 #include <exception>
 #include <cctype>
 #include <string>
-#include <vector>
-#include <iostream>
-#include <algorithm>
 
 int AtoiDansWebservMaisDingerie(std::string chaine_de_caracteres)
 {
@@ -86,46 +83,4 @@ std::string ErreurDansTaGrosseDaronne(short luca)
         << "<body>\r\n"
         << "<center><h1>" << luca << " " << StatusCodeString(luca) << "</h1></center>\r\n</body>\r\n</html>";
     return oss.str();
-}
-
-std::string normalizePath(const std::string& path)
-{
-    std::vector<std::string> parts;
-    std::istringstream iss(path);
-    std::string token;
-    while (std::getline(iss, token, '/')) {
-        if (token == "..") {
-            if (!parts.empty()) parts.pop_back();
-        } else if (!token.empty() && token != ".") {
-            parts.push_back(token);
-        }
-    }
-    std::string result = "/";
-    for (size_t i = 0; i < parts.size(); ++i) {
-        if (i > 0) result += "/";
-        result += parts[i];
-    }
-    return result;
-}
-
-std::string getMimeType(const std::string& filename)
-{
-    size_t dot = filename.find_last_of('.');
-    if (dot == std::string::npos) return "application/octet-stream";
-    std::string ext = filename.substr(dot + 1);
-    if (ext == "html" || ext == "htm") return "text/html";
-    if (ext == "css") return "text/css";
-    if (ext == "js") return "application/javascript";
-    if (ext == "json") return "application/json";
-    if (ext == "png") return "image/png";
-    if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
-    if (ext == "gif") return "image/gif";
-    if (ext == "ico") return "image/x-icon";
-    if (ext == "txt") return "text/plain";
-    if (ext == "pdf") return "application/pdf";
-    if (ext == "svg") return "image/svg+xml";
-    if (ext == "xml") return "application/xml";
-    if (ext == "py") return "text/x-python";
-    // Ajoute d'autres types si besoin
-    return "application/octet-stream";
 }

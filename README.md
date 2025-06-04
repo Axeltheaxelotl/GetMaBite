@@ -311,7 +311,7 @@ s.close()
     &emsp; - Implémentation de `Connection: keep-alive` pour réutiliser les connexions.<br>
 
   7. <u>Support des encodages</u> :<br>
-    &emsp; - Gestion des encodages comme `gzip` ou `chunked`.<br>erg
+    &emsp; - Gestion des encodages comme `gzip` ou `chunked`.<br>
 
   8. <u>Gestion des méthodes HTTP supplémentaires</u> :<br>
     &emsp; - Ajout de méthodes comme `PUT`, `HEAD`, ou `OPTIONS`.<br>
@@ -366,95 +366,3 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 
 ### Conformité HTTP/1.1
 - Vérifiez que les réponses respectent les standards de la RFC 7230.
-
-
-+-----------------------------+
-|         Démarrage           |
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-|  Lecture du fichier config  |
-|  (parseConfig)              |
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-|  Création des sockets       |
-|  (ServerConfig::setupServer)|
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-|  Ajout des sockets serveurs |
-|  à epoll                    |
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-|  Boucle principale          |
-|  (EpollClasse::serverRun)   |
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-|  epoll_wait()               |
-+-----------------------------+
-            |
-            v
-+-----------------------------+
-| Pour chaque événement :     |
-+-----------------------------+
-            |
-   +---------------------+
-   | FD = serveur ?      |-----> Oui ----> acceptConnection()
-   +---------------------+                  |
-            |                               v
-           Non                        Ajout du client à epoll
-            |                               |
-            v                               v
-+-----------------------------+      +----------------------+
-| FD = client prêt à lire ?   |----->| handleRequest()      |
-+-----------------------------+      +----------------------+
-            |                               |
-           Non                              v
-            |                        Lecture de la requête
-            v                               |
-+-----------------------------+             v
-| Autre événement             |      BufferManager::append()
-+-----------------------------+             |
-                                            v
-                                   isRequestComplete() ?
-                                            |
-                                +-----------+-----------+
-                                |                       |
-                              Non                     Oui
-                                |                       |
-                                v                       v
-                        Attendre plus de        Parser la requête
-                        données                 |
-                                                v
-                                        Trouver la location
-                                                |
-                                                v
-                                        Vérifier allow_methods
-                                                |
-                                                v
-                                        Résoudre le chemin
-                                                |
-                                                v
-                                        Stat sur le fichier
-                                                |
-                                +---------------+---------------+
-                                |                               |
-                        Fichier existe ?                  Fichier existe pas
-                                |                               |
-                                v                               v
-                    Gérer GET/POST/DELETE              sendErrorResponse()
-                    (handleGetRequest, etc.)
-                                |
-                                v
-                        sendResponse()
-                                |
-                                v
-                        close(client_fd)
