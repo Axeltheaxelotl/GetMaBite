@@ -1,5 +1,4 @@
 #include "RequestBufferManager.hpp"
-#include "../config/Server.hpp"
 #include <cstdlib>
 #include <cstdio>
 
@@ -19,7 +18,7 @@ void RequestBufferManager::remove(int client_fd) {
     buffers.erase(client_fd);
 }
 
-bool RequestBufferManager::isRequestComplete(int client_fd, const Server& server) {
+bool RequestBufferManager::isRequestComplete(int client_fd) {
     std::string& buf = buffers[client_fd];
     size_t header_end = buf.find("\r\n\r\n");
     if (header_end == std::string::npos)
@@ -37,12 +36,6 @@ bool RequestBufferManager::isRequestComplete(int client_fd, const Server& server
             // Ajout du log de debug
             printf("[isRequestComplete] fd %d: Content-Length=%d, body_received=%zu\n", client_fd, content_length, body_received);
             printf("[isRequestComplete] fd %d: body=\"%s\"\n", client_fd, buf.substr(body_start, body_received).c_str());
-            if (body_received > (size_t)server.client_max_body_size) {
-                printf("[RequestBufferManager] Body size exceeds client_max_body_size\n");
-                // Envoie l'erreur 413 et ferme la connexion
-                // On ne retourne pas false, on signale l'erreur au serveur
-                return -1; // signal spécial pour 413
-            }
             return body_received >= (size_t)content_length;
         }
     }

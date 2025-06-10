@@ -9,7 +9,6 @@
 #define GREEN "\033[32m"
 #define LIGHTMAGENTA "\033[95m"
 #define YELLOW "\033[33m"
-#define FUCK_YOU "\033[35;46;1;3;4m"
 #define CONSOLE_OUTPUT 1
 
 class Logger

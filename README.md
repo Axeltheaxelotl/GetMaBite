@@ -85,7 +85,7 @@ server {
 ### Non explicitement demandés mais fortement recommandés
 
 - [ ] Gestion stricte des headers HTTP (conformité aux standards HTTP, RFC 7230)
-- [x] Support des cookies et gestion de session (bonus)
+- [ ] Support des cookies et gestion de session (bonus)
 
 ## Contributeur
 
@@ -257,6 +257,23 @@ s.close()
   &emsp; - Quand un client envoie une requete, handleRequest lit, traite, repond, puis ferme<br>
   &emsp; - Tout passe par epoll, aucune operation bloquante.<br>
 
+  ---
+
+  <h2>Les derniers points manquants ou a ameliorer</h2>
+  <p>
+  <b>1. Support complet des server_name:</b><br>
+    &emsp; *Implemente la gestion de plusieurs server_name par server
+  </p>
+  <p>
+  <b>2. Gestion stricte des erreurs HTTP:</b><br>
+  &emsp; *Verifier que tous les codes d'etat HTTP sont exacts et que les pages d'erreur<br>
+  &emsp; personnalisees sont servies correctement.
+  </p>
+  <p>
+  <b>5.Timeouts:</b><br>
+  &emsp; *Implementation d une gestion de timeouts pour les connexions inactives.
+
+
 ---
 
 
@@ -332,37 +349,3 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Une compatibilité avec les navigateurs et clients HTTP.
 - Une gestion correcte des requêtes et réponses HTTP.
 - Une conformité aux bonnes pratiques pour éviter des comportements imprévus.
-
----
-
-# Points à revoir (LES DERNIERS)
-
-### Gestion des cookies
-- Vérifiez que les cookies sensibles sont marqués `HttpOnly` et `Secure`. (je c pas si c obliger mais azy)
-- Ajoutez le support de l'attribut `SameSite` pour limiter les risques de CSRF. (la meme je c pas)
-
-### Pages d'erreur HTTP
-- Ajoutez des pages par défaut pour les codes manquants comme `405 Method Not Allowed` et `413 Payload Too Large`.
-- Vérifiez que les pages d'erreur personnalisées fonctionnent correctement.
-
-### Limitation du body client
-
-- Implémentez la directive `client_max_body_size` pour limiter la taille des requêtes.
-
-### Autoindex
-- Assurez-vous que l'option `autoindex` fonctionne correctement selon la configuration.
-
-### Logs détaillés
-- Ajoutez des logs pour les requêtes et réponses HTTP, incluant les erreurs.
-
-### Encodage chunked
-- Implémentez la gestion des réponses avec encodage `chunked`.
-
-### Méthodes HTTP
-- Ajoutez le support des méthodes `HEAD` et `OPTIONS`. (pas obliger)
-
-### Tests de charge
-- Effectuez des stress tests pour vérifier la stabilité sous forte charge. (j ai deja fait )
-
-### Conformité HTTP/1.1
-- Vérifiez que les réponses respectent les standards de la RFC 7230.

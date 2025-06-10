@@ -1,79 +1,14 @@
-------geckoformboundary3dc8b374e0a399f368cd8d5dab5728e
-Content-Disposition: form-data; name="file"; filename="index.html"
-Content-Type: text/html
-
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Webserv - Super Testeur HTTP</title>
-    <link rel="stylesheet" href="/tests/style.css">
-    <link rel="icon" href="/tests/favicon.ico">
-</head>
-<body>
-    <header>
-        <img src="/tests/assets/logo.png" alt="Webserv Logo">
-        <h1>Webserv - Super Testeur HTTP</h1>
-        <div class="explain">Testez toutes les fonctionnalités de votre serveur HTTP C++98 façon NGINX !</div>
-    </header>
-
-    <section>
-        <h2>GET</h2>
-        <div class="explain">Testez la récupération de fichiers statiques et la gestion des erreurs 404.</div>
-        <button onclick="testGet('/tests/test.txt')">GET /tests/test.txt</button>
-        <button onclick="testGet('/tests/inexistant.txt')">GET inexistant (404)</button>
-        <div id="getResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>POST</h2>
-        <div class="explain">Testez l'écriture de données dans un fichier via POST.</div>
-        <form id="postForm" onsubmit="testPost(event)">
-            <label>Contenu à envoyer :</label>
-            <textarea name="content" rows="2" required>Bonjour Webserv !</textarea>
-            <button type="submit">POST sur /tests/post_result.txt</button>
-        </form>
-        <div id="postResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>DELETE</h2>
-        <div class="explain">Testez la suppression d'un fichier (DELETE).</div>
-        <button onclick="testDelete()">DELETE /tests/post_result.txt</button>
-        <div id="deleteResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>Upload de fichier (POST)</h2>
-        <div class="explain">Testez l'upload de fichier avec un formulaire multipart.</div>
-        <form id="uploadForm" enctype="multipart/form-data" onsubmit="testUpload(event)">
-            <input type="file" name="file" required>
-            <button type="submit">Uploader sur /tests/uploaded_file.txt</button>
-        </form>
-        <div id="uploadResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>Cookies</h2>
-        <div class="explain">Testez la gestion des cookies (ex : compteur de visites).</div>
-        <button onclick="testCookie()">Test Cookie (GET /)</button>
-        <div id="cookieResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>Erreurs HTTP</h2>
-        <div class="explain">Testez les pages d'erreur personnalisées (400, 401, 403, 404, 405, 413, 500...)</div>
-        <button onclick="testError(400, '/badrequest')">400 Bad Request</button>
-        <button onclick="testError(401, '/unauthorized')">401 Unauthorized</button>
-        <button onclick="testError(403, '/forbidden')">403 Forbidden</button>
-        <button onclick="testError(404, '/notfound')">404 Not Found</button>
-        <button onclick="testError(405, '/tests/post_result.txt', 'POST')">405 Method Not Allowed</button>
-        <button onclick="testError(413, '/tests/post_result.txt', 'POST', 'A'.repeat(1024*1024*2))">413 Payload Too Large</button>
-        <button onclick="testError(500, '/error')">500 Internal Server Error</button>
-        <div id="errorResult" class="result"></div>
-    </section>
-
-    <section>
-        <h2>CGI</h2>
-        <div class="explain">Testez l'exécution d'un script CGI Python.</div>
-        <button onclick="testGet('/cgi-stuff-folder/run.py')">GET /cgi-st
+[Desktop Entry]
+Name=Visual Studio Code - URL Handler
+Comment=Code Editing. Redefined.
+GenericName=Text Editor
+Exec=/sgoinfre/alanty/VSCode-linux-x64/code --open-url %U
+Icon=com.visualstudio.code
+Type=Application
+NoDisplay=true
+StartupNotify=true
+Categories=Utility;TextEditor;Development;IDE;
+MimeType=x-scheme-handler/vscode;
+Keywords=vscode;
+X-Flatpak-Tags=proprietary;
+X-Flatpak=com.visualstudio.code

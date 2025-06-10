@@ -9,7 +9,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <map>  // for client-fd to port mapping
 #include "../serverConfig/ServerConfig.hpp"
 #include "../config/Server.hpp"
 #include "../http/RequestBufferManager.hpp"
@@ -24,35 +23,27 @@ private:
     int _biggest_fd;
     std::vector<ServerConfig> _servers;
     std::vector<Server> _serverConfigs;
-    std::map<int, int> _serverPorts; // Map server socket fd to its listening port
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
     TimeoutManager timeoutManager;
-    std::map<int, int> _cgiPipes; // Map to store pipe_fd to client_fd mapping
-    std::map<int, int> _clientPorts; // Map client_fd to listening port
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);
     void addToEpoll(int fd, epoll_event &event);
     void handleError(int fd);
-
+    
     // Méthode pour résoudre les chemins
     std::string resolvePath(const Server &server, const std::string &requestedPath);
-
+    
     // Méthodes de gestion des requêtes HTTP
     void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies);
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
-    void handlePutRequest(int client_fd, const std::string &request, const std::string &filePath, const std::string &uploadPath);
     void sendResponse(int client_fd, const std::string &response);
-    void sendErrorResponse(int client_fd, int code, const Server& server, const std::string& allowHeader = "");
+    void sendErrorResponse(int client_fd, int code, const Server& server);
 
     // Finds the matching server based on host and port
     int findMatchingServer(const std::string& host, int port);
-
-    // Handle CGI requests
-    void handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &body);
-    std::map<std::string, std::string> parseCGIParams(const std::string& paramString);
 
 public:
     EpollClasse();
@@ -61,7 +52,6 @@ public:
     void serverRun();
     void handleRequest(int client_fd);
     void acceptConnection(int server_fd);
-    void processCGIOutput(int pipe_fd); // Declare the processCGIOutput function
 };
 
 #endif

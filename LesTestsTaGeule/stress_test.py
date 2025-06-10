@@ -53,7 +53,7 @@ class ApplicationStressTest:
     def __init__(self, fenetre):
         self.fenetre = fenetre
         self.fenetre.title("Test de Stress")
-        self.fenetre.configure(bg="#ffffff")  # Couleur de fond de la fenêtre
+        self.fenetre.configure(bg="#f0f0f0")  # Couleur de fond de la fenêtre
 
         # Éléments de l'interface
         self.label_logs = tk.Label(fenetre, text="Logs :", bg="#f0f0f0", fg="#333333", font=("Arial", 12, "bold"))

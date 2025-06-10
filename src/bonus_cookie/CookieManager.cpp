@@ -19,24 +19,10 @@ std::map<std::string, std::string> CookieManager::parseCookies(const std::string
     return cookies;
 }
 
-bool CookieManager::isValidCookieName(const std::string& name) {
-    return !name.empty() && name.find_first_of("=;, \t\r\n") == std::string::npos;
-}
-
-bool CookieManager::isValidCookieValue(const std::string& value) {
-    return value.find_first_of("; \t\r\n") == std::string::npos;
-}
-
-std::string CookieManager::createSetCookieHeader(const std::string& name, const std::string& value, int maxAge, const std::string& path, bool httpOnly, bool secure, const std::string& sameSite) {
+std::string CookieManager::createSetCookieHeader(const std::string& name, const std::string& value, int maxAge, const std::string& path) {
     std::ostringstream oss;
     oss << "Set-Cookie: " << name << "=" << value << "; Path=" << path;
     if (maxAge >= 0)
         oss << "; Max-Age=" << maxAge;
-    if (httpOnly)
-        oss << "; HttpOnly";
-    if (secure)
-        oss << "; Secure";
-    if (!sameSite.empty())
-        oss << "; SameSite=" << sameSite;
     return oss.str();
 }

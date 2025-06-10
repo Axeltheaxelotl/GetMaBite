@@ -3,15 +3,15 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
+/*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/11 08:34:52 by smasse            #+#    #+#             */
-/*   Updated: 2025/06/04 13:45:10 by alanty           ###   ########.fr       */
+/*   Updated: 2025/03/14 12:32:55 by smasse           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include"Server.hpp"
 
-Server::Server() : client_max_body_size(1048576) {} // 1 Mo = 1 * 1024 * 1024 = 1048576
+Server::Server() : client_max_body_size(0) {}
 
 Server::~Server() {}

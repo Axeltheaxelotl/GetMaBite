@@ -23,8 +23,12 @@ int main(int argc, char **argv)
     std::vector<ServerConfig> serverConfigs;
     for (std::vector<Server>::const_iterator it = servers.begin(); it != servers.end(); ++it)
     {
-        // Toujours écouter sur 0.0.0.0 (toutes les interfaces)
-        std::string host = "0.0.0.0";
+        std::string host = "0.0.0.0"; // Valeur par défaut
+        if (!it->server_names.empty())
+        {
+            host = it->server_names[0]; // Utilise le premier nom de serveur comme host
+        }
+        
         for (std::vector<int>::const_iterator portIt = it->listen_ports.begin(); 
              portIt != it->listen_ports.end(); ++portIt)
         {
