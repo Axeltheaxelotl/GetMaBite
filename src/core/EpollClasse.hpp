@@ -45,6 +45,10 @@ private:
     // Finds the matching server based on host and port
     int findMatchingServer(const std::string& host, int port);
 
+    void handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &body);
+    std::map<std::string, std::string> parseCGIParams(const std::string& paramString);
+
+
 public:
     EpollClasse();
     ~EpollClasse();

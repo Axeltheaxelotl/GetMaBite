@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
+/*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/04/24 14:57:21 by alanty           ###   ########.fr       */
+/*   Updated: 2025/06/12 18:31:00 by smasse           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -300,6 +300,8 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			{
 				if(currentLocation)
 					currentLocation->allow_methods.push_back(method);
+									else if(currentServer)
+					currentServer->allow_methods.push_back(method);
 			}
 		}
 		else if(directive == "cgi_extension")
@@ -308,6 +310,8 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			iss >> extension >> interpreter;
 			if(currentLocation)
 				currentLocation->cgi_extensions[extension] = interpreter;
+							else if(currentServer)
+				currentServer->cgi_extensions[extension] = interpreter;
 		}
 		else if(directive == "upload_path")
 		{

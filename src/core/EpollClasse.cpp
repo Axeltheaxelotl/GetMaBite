@@ -13,6 +13,7 @@
 #include "../http/RequestBufferManager.hpp"
 #include "../bonus_cookie/CookieManager.hpp"
 #include "../config/ServerNameHandler.hpp"
+#include"../cgi/CgiHandler.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -362,15 +363,77 @@ void EpollClasse::handleRequest(int client_fd) {
     }
 
     // Utiliser resolvePath pour obtenir le chemin réel
-    std::string resolvedPath = resolvePath(server, path);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
+	std::string resolvedPath = resolvePath(server, path);
+	// get CGI param
+	size_t cgiPos = resolvedPath.rfind("?");
+	std::string cgiParam = "";
+	if(cgiPos != std::string::npos && cgiPos + 1 < resolvedPath.length())
+	{
+		cgiParam = resolvedPath.substr(cgiPos + 1); // +1 to skip "?"
+		resolvedPath = resolvedPath.substr(0, cgiPos); // Remove the query string from the path
+	}
+	Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
 
     // Vérifier si le fichier existe
     struct stat file_stat;
     if (::stat(resolvedPath.c_str(), &file_stat) == 0)
-    {
+    {   
+        		size_t cgiPos = resolvedPath.rfind(".cgi.");
+		if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
+		{
+			// Get the extension part after ".cgi."
+			std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
+			// Find the matching location and check if the extension is supported
+			Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
+			std::map<std::string, std::string> cgi_handlers;
+			// First check the matched location (if we have one)
+			if(matchedLocation)
+			{
+				std::map<std::string, std::string>::const_iterator cgiIt =
+				    matchedLocation->cgi_extensions.find(extension);
+				if(cgiIt != matchedLocation->cgi_extensions.end())
+				{
+					cgi_handlers[extension + "_location"] = cgiIt->second;
+					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in matched location: %s", cgiIt->second.c_str());
+				}
+			}
+			// Check all server-wide locations (collect all matches)
+			for(std::vector<Location>::const_iterator locIt = server.locations.begin();
+			        locIt != server.locations.end(); ++locIt)
+			{
+				std::map<std::string, std::string>::const_iterator cgiIt =
+				    locIt->cgi_extensions.find(extension);
+				if(cgiIt != locIt->cgi_extensions.end())
+				{
+					// Use a unique key by appending the location path
+					cgi_handlers[extension + "_" + locIt->path] = cgiIt->second;
+					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in location %s: %s",
+					               locIt->path.c_str(), cgiIt->second.c_str());
+				}
+			}
+			// Check server-wide CGI extensions
+			std::map<std::string, std::string>::const_iterator serverCgiIt =
+			    server.cgi_extensions.find(extension);
+			if(serverCgiIt != server.cgi_extensions.end())
+			{
+				cgi_handlers[extension] = serverCgiIt->second;
+				Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found server-wide CGI handler: %s", serverCgiIt->second.c_str());
+			}
+			if(!cgi_handlers.empty())
+			{
+				// Convert string to map before passing to handleCGI
+				std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
+				// Pass the body to handleCGI
+				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
+			}
+			else
+			{
+				// No handler found for this CGI extension
+				sendErrorResponse(client_fd, 501, server);
+			}
+		}
         // Le fichier existe, on le traite selon la méthode
-        if (method == "GET" || method == "HEAD")
+        else if (method == "GET" || method == "HEAD")
         {
             // Passer cookies à handleGetRequest (à modifier dans la signature)
             handleGetRequest(client_fd, resolvedPath, server, method == "HEAD", cookies);
@@ -419,6 +482,13 @@ void EpollClasse::sendResponse(int client_fd, const std::string &response)
         }
         total_sent += sent;
     }
+}
+
+void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request)
+{
+	CgiHandler cgiHandler(client_fd, cgiPath, method, cgi_handler, cgiParams, request);
+	std::string response = cgiHandler.executeCgi();
+	sendResponse(client_fd, response);
 }
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
@@ -657,4 +727,28 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
              << "Content-Length: " << body.size() << "\r\n\r\n"
              << body;
     sendResponse(client_fd, response.str());
+}
+
+// Utility function to parse CGI query parameters
+std::map<std::string, std::string> EpollClasse::parseCGIParams(const std::string& paramString)
+{
+	std::map<std::string, std::string> params;
+	std::istringstream stream(paramString);
+	std::string pair;
+	while(std::getline(stream, pair, '&'))
+	{
+		size_t pos = pair.find('=');
+		if(pos != std::string::npos)
+		{
+			std::string key = pair.substr(0, pos);
+			std::string value = pair.substr(pos + 1);
+			params[key] = value;
+		}
+		else if(!pair.empty())
+		{
+			// If there's no '=', use the parameter as key with empty value
+			params[pair] = "";
+		}
+	}
+	return params;
 }
