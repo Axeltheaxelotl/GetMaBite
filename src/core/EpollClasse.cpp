@@ -7,7 +7,7 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <algorithm> // Ensure std::find is available
+#include <algorithm>
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
 #include "../utils/Utils.hpp"
@@ -144,9 +144,7 @@ void EpollClasse::serverRun() {
         std::vector<int> timedOutClients = timeoutManager.getTimedOutClients();
         for (std::vector<int>::iterator it = timedOutClients.begin(); it != timedOutClients.end(); ++it) {
             Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client %d timed out. Closing connection.", *it);
-            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL); // Remove client from epoll
-            close(*it);
-            timeoutManager.removeClient(*it); // Remove client from timeout manager
+            closeConnection(*it);
         }
         // Exit if exit sent in console
         
@@ -197,13 +195,14 @@ void EpollClasse::acceptConnection(int server_fd)
 {
     struct sockaddr_in client_address;
     socklen_t addrlen = sizeof(client_address);
-    int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
+    int client_fd = accept(server_fd, (sockaddr*)&client_address, &addrlen);
     if (client_fd == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept error");
         return;
     }
-
+    // Make client socket non-blocking
+    setNonBlocking(client_fd);
     epoll_event event;
     event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
     event.data.fd = client_fd;
@@ -211,6 +210,8 @@ void EpollClasse::acceptConnection(int server_fd)
     addToEpoll(client_fd, event);
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d",
                    inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+    // Add new client to timeout manager
+    timeoutManager.addClient(client_fd);
 }
 
 // Résoudre le chemin demandé
@@ -258,8 +259,8 @@ void EpollClasse::handleRequest(int client_fd) {
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d", client_fd);
         }
-        close(client_fd);
-        timeoutManager.removeClient(client_fd);
+        // close and cleanup
+        closeConnection(client_fd);
         return;
     }
 
@@ -280,6 +281,10 @@ void EpollClasse::handleRequest(int client_fd) {
     std::string method, path, protocol;
     std::istringstream requestStream(request);
     requestStream >> method >> path >> protocol;
+
+    // Treat HEAD as GET for permission checks
+    bool isHead = (method == "HEAD");
+    std::string methodForCheck = isHead ? "GET" : method;
 
     if (path.empty())
         path = "/";
@@ -305,7 +310,7 @@ void EpollClasse::handleRequest(int client_fd) {
         bool allowed = false;
         for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
         {
-            if (matchedLocation->allow_methods[i] == method)
+            if (matchedLocation->allow_methods[i] == methodForCheck)
             {
                 allowed = true;
                 break;
@@ -329,7 +334,7 @@ void EpollClasse::handleRequest(int client_fd) {
                      << "\r\n"
                      << body;
             sendResponse(client_fd, response.str());
-            close(client_fd);
+            closeConnection(client_fd);
             return;
         }
     }
@@ -342,7 +347,7 @@ void EpollClasse::handleRequest(int client_fd) {
             for (size_t i = 0; i < server.locations.size(); ++i) {
                 if (server.locations[i].path == "/") {
                     for (size_t j = 0; j < server.locations[i].allow_methods.size(); ++j) {
-                        if (server.locations[i].allow_methods[j] == method) {
+                        if (server.locations[i].allow_methods[j] == methodForCheck) {
                             allowed = true;
                             break;
                         }
@@ -350,8 +355,9 @@ void EpollClasse::handleRequest(int client_fd) {
                 }
             }
         }
-        // Si pas de location /, GET seulement autorisé par défaut
-        if (!allowed && method == "GET")
+
+        // Si pas de location /, GET (et HEAD) autorisés par défaut
+        if (!allowed && methodForCheck == "GET")
             allowed = true;
         if (!allowed) {
             std::string allowHeader = "Allow: GET";
@@ -364,81 +370,82 @@ void EpollClasse::handleRequest(int client_fd) {
                      << "\r\n"
                      << body;
             sendResponse(client_fd, response.str());
-            close(client_fd);
+            closeConnection(client_fd);
             return;
         }
     }
 
     // Utiliser resolvePath pour obtenir le chemin réel
-	std::string resolvedPath = resolvePath(server, path);
-	// get CGI param
-	size_t cgiPos = resolvedPath.rfind("?");
-	std::string cgiParam = "";
-	if(cgiPos != std::string::npos && cgiPos + 1 < resolvedPath.length())
-	{
-		cgiParam = resolvedPath.substr(cgiPos + 1); // +1 to skip "?"
-		resolvedPath = resolvedPath.substr(0, cgiPos); // Remove the query string from the path
-	}
-	Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
+    std::string resolvedPath = resolvePath(server, path);
+
+    // get CGI param
+    size_t cgiPos = resolvedPath.rfind("?");
+    std::string cgiParam = "";
+    if(cgiPos != std::string::npos && cgiPos + 1 < resolvedPath.length())
+    {
+        cgiParam = resolvedPath.substr(cgiPos + 1); // +1 to skip "?"
+        resolvedPath = resolvedPath.substr(0, cgiPos); // Remove the query string from the path
+    }
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
 
     // Vérifier si le fichier existe
     struct stat file_stat;
     if (::stat(resolvedPath.c_str(), &file_stat) == 0)
     {   
-        		size_t cgiPos = resolvedPath.rfind(".cgi.");
-		if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
-		{
-			// Get the extension part after ".cgi."
-			std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
-			// Find the matching location and check if the extension is supported
-			Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
-			std::map<std::string, std::string> cgi_handlers;
-			// First check the matched location (if we have one)
-			if(matchedLocation)
-			{
-				std::map<std::string, std::string>::const_iterator cgiIt =
-				    matchedLocation->cgi_extensions.find(extension);
-				if(cgiIt != matchedLocation->cgi_extensions.end())
-				{
-					cgi_handlers[extension + "_location"] = cgiIt->second;
-					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in matched location: %s", cgiIt->second.c_str());
-				}
-			}
-			// Check all server-wide locations (collect all matches)
-			for(std::vector<Location>::const_iterator locIt = server.locations.begin();
-			        locIt != server.locations.end(); ++locIt)
-			{
-				std::map<std::string, std::string>::const_iterator cgiIt =
-				    locIt->cgi_extensions.find(extension);
-				if(cgiIt != locIt->cgi_extensions.end())
-				{
-					// Use a unique key by appending the location path
-					cgi_handlers[extension + "_" + locIt->path] = cgiIt->second;
-					Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in location %s: %s",
-					               locIt->path.c_str(), cgiIt->second.c_str());
-				}
-			}
-			// Check server-wide CGI extensions
-			std::map<std::string, std::string>::const_iterator serverCgiIt =
-			    server.cgi_extensions.find(extension);
-			if(serverCgiIt != server.cgi_extensions.end())
-			{
-				cgi_handlers[extension] = serverCgiIt->second;
-				Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found server-wide CGI handler: %s", serverCgiIt->second.c_str());
-			}
-			if(!cgi_handlers.empty())
-			{
-				// Convert string to map before passing to handleCGI
-				std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
-				// Pass the body to handleCGI
-				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
-			}
-			else
-			{
-				// No handler found for this CGI extension
-				sendErrorResponse(client_fd, 501, server);
-			}
-		}
+            size_t cgiPos = resolvedPath.rfind(".cgi.");
+        if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
+        {
+            // Get the extension part after ".cgi."
+            std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
+            // Find the matching location and check if the extension is supported
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
+            std::map<std::string, std::string> cgi_handlers;
+            // First check the matched location (if we have one)
+            if(matchedLocation)
+            {
+                std::map<std::string, std::string>::const_iterator cgiIt =
+                    matchedLocation->cgi_extensions.find(extension);
+                if(cgiIt != matchedLocation->cgi_extensions.end())
+                {
+                    cgi_handlers[extension + "_location"] = cgiIt->second;
+                    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in matched location: %s", cgiIt->second.c_str());
+                }
+            }
+            // Check all server-wide locations (collect all matches)
+            for(std::vector<Location>::const_iterator locIt = server.locations.begin();
+                    locIt != server.locations.end(); ++locIt)
+            {
+                std::map<std::string, std::string>::const_iterator cgiIt =
+                    locIt->cgi_extensions.find(extension);
+                if(cgiIt != locIt->cgi_extensions.end())
+                {
+                    // Use a unique key by appending the location path
+                    cgi_handlers[extension + "_" + locIt->path] = cgiIt->second;
+                    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found CGI handler in location %s: %s",
+                                   locIt->path.c_str(), cgiIt->second.c_str());
+                }
+            }
+            // Check server-wide CGI extensions
+            std::map<std::string, std::string>::const_iterator serverCgiIt =
+                server.cgi_extensions.find(extension);
+            if(serverCgiIt != server.cgi_extensions.end())
+            {
+                cgi_handlers[extension] = serverCgiIt->second;
+                Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Found server-wide CGI handler: %s", serverCgiIt->second.c_str());
+            }
+            if(!cgi_handlers.empty())
+            {
+                // Convert string to map before passing to handleCGI
+                std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
+                // Pass the body to handleCGI
+                handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
+            }
+            else
+            {
+                // No handler found for this CGI extension
+                sendErrorResponse(client_fd, 501, server);
+            }
+        }
         // Le fichier existe, on le traite selon la méthode
         else if (method == "GET" || method == "HEAD")
         {
@@ -470,7 +477,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 404, server);
     }
 
-    close(client_fd);
+    closeConnection(client_fd);
 }
 
 void EpollClasse::sendResponse(int client_fd, const std::string &response)
@@ -499,32 +506,50 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
 {
-    // Trouver le début du corps de la requête
-    size_t body_pos = request.find("\r\n\r\n");
-    if (body_pos == std::string::npos)
-    {
+    // Separate headers and body
+    size_t header_end = request.find("\r\n\r\n");
+    if (header_end == std::string::npos) {
         sendErrorResponse(client_fd, 400, _serverConfigs[0]);
-        close(client_fd);
+        closeConnection(client_fd);
         return;
     }
+    std::string body = request.substr(header_end + 4);
 
-    std::string body = request.substr(body_pos + 4);
-    // Créer ou écraser le fichier (POST doit créer le fichier s'il n'existe pas)
-    std::ofstream outFile(filePath.c_str());
-    if (outFile)
-    {
-        outFile << body;
-        outFile.close();
-        std::string response = "HTTP/1.1 201 Created\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>201 Created</h1></body></html>";
-        sendResponse(client_fd, response);
+    // Determine storage path; if target is a directory, generate unique filename
+    std::string targetPath = filePath;
+    struct stat st;
+    if (stat(targetPath.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+        std::ostringstream fname;
+        fname << targetPath << "/upload_" << time(NULL);
+        targetPath = fname.str();
+    } else {
+        // Ensure parent directory exists
+        size_t slash = targetPath.find_last_of('/');
+        if (slash != std::string::npos) {
+            std::string dir = targetPath.substr(0, slash);
+            mkdir(dir.c_str(), 0755);
+        }
     }
-    else
-    {
+
+    // Write raw body to file (no multipart parsing)
+    std::ofstream ofs(targetPath.c_str(), std::ios::binary);
+    if (!ofs) {
         sendErrorResponse(client_fd, 403, _serverConfigs[0]);
+        closeConnection(client_fd);
+        return;
     }
-    close(client_fd);
+    ofs.write(body.data(), body.size());
+    ofs.close();
+
+    // Send response
+    std::string msg = "Uploaded to " + targetPath;
+    std::ostringstream response;
+    response << "HTTP/1.1 201 Created\r\n"
+             << "Content-Type: text/plain\r\n"
+             << "Content-Length: " << msg.size() << "\r\n\r\n"
+             << msg;
+    sendResponse(client_fd, response.str());
+    closeConnection(client_fd);
 }
 
 void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath)
@@ -538,14 +563,22 @@ void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath
     {
         sendErrorResponse(client_fd, 404, _serverConfigs[0]);
     }
-    close(client_fd);
+    closeConnection(client_fd);
+}
+
+// Centralized client close: remove from epoll and timeout, then close
+void EpollClasse::closeConnection(int fd)
+{
+    epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+    timeoutManager.removeClient(fd);
+    close(fd);
 }
 
 // Gérer les erreurs
 void EpollClasse::handleError(int fd)
 {
     Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD: %d", fd);
-    close(fd);
+    closeConnection(fd);
 }
 
 // Définir un FD en mode non bloquant

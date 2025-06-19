@@ -462,13 +462,13 @@ Upload & multipart
 • Pas de parsing multipart/form-data
 • handlePostRequest() vide, pas d’écriture disque
 
-GET/HEAD/DELETE
-• Pas de HEAD spécifique
-• Implémentations non vérifiées
+          GET/HEAD/DELETE
+          • Pas de HEAD spécifique
+          • Implémentations non vérifiées
 
-Timeout & nettoyage
-• TimeoutManager non intégré à la boucle epoll
-• FDs non fermés sur erreur
+          Timeout & nettoyage
+          • TimeoutManager non intégré à la boucle epoll
+          • FDs non fermés sur erreur
 
 Routing & virtual hosts
 • Deux handlers redondants (ServerNameHandler vs ServerRouter)

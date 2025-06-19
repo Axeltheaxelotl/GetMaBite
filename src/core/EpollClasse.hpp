@@ -57,6 +57,7 @@ public:
     void serverRun();
     void handleRequest(int client_fd);
     void acceptConnection(int server_fd);
+    void closeConnection(int fd);
 };
 
 #endif
