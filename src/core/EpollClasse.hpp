@@ -13,6 +13,7 @@
 #include "../config/Server.hpp"
 #include "../http/RequestBufferManager.hpp"
 #include "../core/TimeoutManager.hpp"
+#include <map>
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096
@@ -36,7 +37,7 @@ private:
     std::string resolvePath(const Server &server, const std::string &requestedPath);
     
     // Méthodes de gestion des requêtes HTTP
-    void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead, const std::map<std::string, std::string>& cookies);
+    void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead);
     void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath);
     void handleDeleteRequest(int client_fd, const std::string &filePath);
     void sendResponse(int client_fd, const std::string &response);
