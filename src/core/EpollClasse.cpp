@@ -6,6 +6,7 @@
 #include <cstring>
 #include <sstream>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <algorithm> // Ensure std::find is available
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
@@ -60,6 +61,11 @@ EpollClasse::EpollClasse() : timeoutManager(10) // Initialize TimeoutManager wit
         exit(EXIT_FAILURE);
     }
     _biggest_fd = 0;
+    // Monitor STDIN for exit commands
+    epoll_event stdinEvent;
+    stdinEvent.events = EPOLLIN;
+    stdinEvent.data.fd = STDIN_FILENO;
+    addToEpoll(STDIN_FILENO, stdinEvent);
 }
 
 // Destructeur
@@ -107,6 +113,20 @@ void EpollClasse::serverRun() {
 
         for (int i = 0; i < event_count; ++i) {
             int fd = _events[i].data.fd;
+            // Handle console input for exit
+            if (fd == STDIN_FILENO) {
+                char inputBuf[16];
+                int len = read(STDIN_FILENO, inputBuf, sizeof(inputBuf) - 1);
+                if (len > 0) {
+                    inputBuf[len] = '\0';
+                    std::string cmd(inputBuf);
+                    if (cmd.find("exit") != std::string::npos) {
+                        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Exit command received. Shutting down.");
+                        return;
+                    }
+                }
+                continue;
+            }
 
             if (_events[i].events & EPOLLIN) {
                 if (isServerFd(fd)) {
@@ -128,6 +148,8 @@ void EpollClasse::serverRun() {
             close(*it);
             timeoutManager.removeClient(*it); // Remove client from timeout manager
         }
+        // Exit if exit sent in console
+        
     }
 }
 
