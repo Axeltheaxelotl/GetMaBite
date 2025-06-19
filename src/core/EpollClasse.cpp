@@ -178,11 +178,9 @@ void EpollClasse::acceptConnection(int server_fd)
     int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
     if (client_fd == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept error");
         return;
     }
-
-    setNonBlocking(client_fd);
 
     epoll_event event;
     event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
@@ -236,7 +234,7 @@ void EpollClasse::handleRequest(int client_fd) {
         if (bytes_read == 0) {
             Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
         } else {
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d", client_fd);
         }
         close(client_fd);
         timeoutManager.removeClient(client_fd);
