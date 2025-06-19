@@ -349,3 +349,139 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Une compatibilité avec les navigateurs et clients HTTP.
 - Une gestion correcte des requêtes et réponses HTTP.
 - Une conformité aux bonnes pratiques pour éviter des comportements imprévus.
+
+
+
+
+
+
+
+
+
+• Le programme doit prendre un fichier de configuration en argument ou utiliser un chemin par default.
+• Vous ne pouvez pas exécuter un autre serveur web
+• Votre serveur ne doit jamais bloquer et le client doit être correctement renvoyé si
+nécessaire
+• Il doit être non bloquant et n’utiliser qu’un seul epoll() pour
+toutes les opérations entrées/sorties entre le client et le serveur
+• epoll() doit verifier la lecture et l ecriture en meme temps
+• Vous ne devriez jamais faire une opération de lecture ou une opération d’écriture sans passer par epoll()
+• La vérification de la valeur de errno est strictement interdite après une opération de lecture ou d’écriture.
+• Vous n’avez pas besoin d’utiliser epoll() (ou équivalent) avant de lire votre fichier de configuration.
+• Vous pouvez utiliser chaque macro et définir comme FD_SET, FD_CLR, FD_ISSET,
+FD_ZERO (comprendre ce qu’elles font et comment elles le font est très utile).
+• Une requête à votre serveur ne devrait jamais se bloquer pour indéfiniment.
+• Votre serveur doit être compatible avec le navigateur web de votre choix.
+• Nous considérerons que NGINX est conforme à HTTP 1.1 et peut être utilisé pour
+comparer les en-têtes et les comportements de réponse.
+• Vos codes d’état de réponse HTTP doivent être exacts.
+• Votre serveur doit avoir des pages d’erreur par défaut si aucune n’est fournie.
+• Vous ne pouvez pas utiliser fork pour autre chose que CGI (comme PHP ou Python,
+etc).
+• Vous devriez pouvoir servir un site web entièrement statique.
+• Le client devrait pouvoir téléverser des fichiers.
+• Vous avez besoin au moins des méthodes GET, POST, et DELETE
+• Stress testez votre serveur, il doit rester disponible à tout prix.
+• Votre serveur doit pouvoir écouter sur plusieurs ports (cf. Fichier de configuration).
+
+Vous pouvez vous inspirer de la partie "serveur" du fichier de
+configuration NGINX.
+Dans ce fichier de configuration, vous devez pouvoir :
+• Choisir le port et l’host de chaque "serveur".
+• Setup server_names ou pas.
+• Le premier serveur pour un host:port sera le serveur par défaut pour cet host:port
+(ce qui signifie qu’il répondra à toutes les requêtes qui n’appartiennent pas à un
+autre serveur).
+• Setup des pages d’erreur par défaut.
+• Limiter la taille du body des clients.
+• Setup des routes avec une ou plusieurs des règles/configurations suivantes (les
+routes n’utiliseront pas de regexp) :
+◦ Définir une liste de méthodes HTTP acceptées pour la route.
+◦ Définir une redirection HTTP.
+◦ Définir un répertoire ou un fichier à partir duquel le fichier doit être recherché
+(par exemple si l’url /kapouet est rootée sur /tmp/www, l’url /kapouet/pouic/toto/pouet
+est /tmp/www/pouic/toto/pouet).
+◦ Activer ou désactiver le listing des répertoires.
+7
+Webserv C’est le moment de comprendre pourquoi les URLs commencent par HTTP !
+◦ Set un fichier par défaut comme réponse si la requête est un répertoire.
+◦ Exécuter CGI en fonction de certaines extensions de fichier (par exemple .php).
+◦ Faites-le fonctionner avec les méthodes POST et GET.
+◦ Rendre la route capable d’accepter les fichiers téléversés et configurer où cela
+doit être enregistré.
+— Vous vous demandez ce qu’est un CGI ?
+— Parce que vous n’allez pas appeler le CGI mais utiliser directement le chemin
+complet comme PATH_INFO.
+— Souvenez-vous simplement que pour les requêtes fragmentées, votre serveur
+doit la dé-fragmenter et le CGI attendra EOF comme fin du body.
+— Même choses pour la sortie du CGI. Si aucun content_length n’est renvoyé
+par le CGI, EOF signifiera la fin des données renvoyées.
+— Votre programme doit appeler le CGI avec le fichier demandé comme premier argument.
+— Le CGI doit être exécuté dans le bon répertoire pour l’accès au fichier de
+chemin relatif.
+— votre serveur devrait fonctionner avec un seul CGI (php-CGI, Python, etc.).
+Vous devez fournir des fichiers de configuration et des fichiers de base par défaut pour
+tester et démontrer que chaque fonctionnalité fonctionne pendant l’évaluation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+• Beaucoup de directives non traitées (server_name, root/alias, methods, error_page, cgi_extensions…)
+• Pas de client_max_body_size, pages d’erreur par défaut, redirections, autoindex, upload_path
+
+          epoll & non-blocage
+          • Seulement EPOLLIN, jamais EPOLLOUT
+          • read()/write() hors epoll (bloquant)
+          • Vérification d’errno après I/O (interdit)
+
+CGI
+• setCgiHeaders() inutilisé
+• Corps POST mis en ENV au lieu du stdin
+• Pas de vars CGI standard (CONTENT_TYPE, PATH_INFO…)
+• Pas de chdir() avant execve
+• Lecture bloquante des pipes CGI
+
+Upload & multipart
+• Pas de parsing multipart/form-data
+• handlePostRequest() vide, pas d’écriture disque
+
+GET/HEAD/DELETE
+• Pas de HEAD spécifique
+• Implémentations non vérifiées
+
+Timeout & nettoyage
+• TimeoutManager non intégré à la boucle epoll
+• FDs non fermés sur erreur
+
+Routing & virtual hosts
+• Deux handlers redondants (ServerNameHandler vs ServerRouter)
+• Pas de serveur par défaut si host inconnu
+
+Pages d’erreur
+• error_pages jamais lues ni servies
+• Utils::ErreurDansTaGrosseDaronne non utilisé
+
+Robustesse & sécurité
+• Fuites de FDs en cas d’erreur
+• substr/find_last_of sans test de npos
+
+Tests & HTTP1.1
+• Peu ou pas de tests unitaires/intégration
+• En-têtes (keep-alive, chunked…) pas validés

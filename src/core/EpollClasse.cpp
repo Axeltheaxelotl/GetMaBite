@@ -422,7 +422,6 @@ void EpollClasse::handleRequest(int client_fd) {
         // Le fichier existe, on le traite selon la méthode
         else if (method == "GET" || method == "HEAD")
         {
-            // Passer cookies à handleGetRequest (à modifier dans la signature)
             handleGetRequest(client_fd, resolvedPath, server, method == "HEAD");
         }
         else if (method == "POST")
