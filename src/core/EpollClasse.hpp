@@ -14,6 +14,7 @@
 #include "../http/RequestBufferManager.hpp"
 #include "../core/TimeoutManager.hpp"
 #include <map>
+#include "../cgi/CgiHandler.hpp"
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096
@@ -27,11 +28,14 @@ private:
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
     TimeoutManager timeoutManager;
+    std::map<int, CgiHandler*> _cgiHandlers;
+    std::map<int, std::string> _cgiBuffers;
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);
     void addToEpoll(int fd, epoll_event &event);
-    void handleError(int fd);
+    #define handleError(fd) handleError_impl(fd, __FILE__, __LINE__, __FUNCTION__)
+    void handleError_impl(int fd, const char* file, int line, const char* caller);
     
     // Méthode pour résoudre les chemins
     std::string resolvePath(const Server &server, const std::string &requestedPath);
@@ -48,6 +52,7 @@ private:
 
     void handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &body);
     std::map<std::string, std::string> parseCGIParams(const std::string& paramString);
+    void processCgiOutput(int fd);
 
 
 public:

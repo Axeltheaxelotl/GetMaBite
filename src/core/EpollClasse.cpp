@@ -129,14 +129,20 @@ void EpollClasse::serverRun() {
             }
 
             if (_events[i].events & EPOLLIN) {
-                if (isServerFd(fd)) {
+                if (_cgiHandlers.find(fd) != _cgiHandlers.end()) {
+                    processCgiOutput(fd);
+                } else if (isServerFd(fd)) {
                     acceptConnection(fd);
                 } else {
                     handleRequest(fd);
                     timeoutManager.updateClientActivity(fd); // Update client activity
                 }
             } else if (_events[i].events & (EPOLLHUP | EPOLLERR)) {
-                handleError(fd);
+                if ((_events[i].events & EPOLLHUP) && _cgiHandlers.find(fd) != _cgiHandlers.end()) {
+                    processCgiOutput(fd);
+                } else {
+                    handleError(fd);
+                }
             }
         }
 
@@ -251,19 +257,20 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd) {
     char buffer[BUFFER_SIZE];
-    int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
+    ssize_t bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
 
-    if (bytes_read <= 0) {
-        if (bytes_read == 0) {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
-        } else {
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d", client_fd);
-        }
-        // close and cleanup
+    if (bytes_read < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return;
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
         closeConnection(client_fd);
         return;
     }
-
+    if (bytes_read == 0) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
+        closeConnection(client_fd);
+        return;
+    }
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
@@ -387,6 +394,8 @@ void EpollClasse::handleRequest(int client_fd) {
         resolvedPath = resolvedPath.substr(0, cgiPos); // Remove the query string from the path
     }
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Resolved path: %s", resolvedPath.c_str());
+    // Parse CGI parameters
+    std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
 
     // Vérifier si le fichier existe
     struct stat file_stat;
@@ -435,10 +444,8 @@ void EpollClasse::handleRequest(int client_fd) {
             }
             if(!cgi_handlers.empty())
             {
-                // Convert string to map before passing to handleCGI
-                std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
-                // Pass the body to handleCGI
                 handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
+                return;
             }
             else
             {
@@ -499,9 +506,39 @@ void EpollClasse::sendResponse(int client_fd, const std::string &response)
 
 void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request)
 {
-	CgiHandler cgiHandler(client_fd, cgiPath, method, cgi_handler, cgiParams, request);
-	std::string response = cgiHandler.executeCgi();
-	sendResponse(client_fd, response);
+	CgiHandler* handler = new CgiHandler(client_fd, cgiPath, method, cgi_handler, cgiParams, request);
+    handler->forkProcess();
+    int outFd = handler->getOutputFd();
+    setNonBlocking(outFd);
+    epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
+    ev.data.fd = outFd;
+    addToEpoll(outFd, ev);
+    _cgiHandlers[outFd] = handler;
+    _cgiBuffers[outFd] = "";
+}
+
+// Handle asynchronous CGI output
+void EpollClasse::processCgiOutput(int fd)
+{
+    char buffer[BUFFER_SIZE];
+    ssize_t n;
+    while ((n = read(fd, buffer, BUFFER_SIZE)) > 0) {
+        _cgiBuffers[fd].append(buffer, n);
+    }
+    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return;
+    }
+    CgiHandler* handler = _cgiHandlers[fd];
+    int client_fd = handler->getClientFd();
+    sendResponse(client_fd, _cgiBuffers[fd]);
+    // cleanup CGI output FD
+    epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+    close(fd);
+    delete handler;
+    _cgiHandlers.erase(fd);
+    _cgiBuffers.erase(fd);
+    closeConnection(client_fd);
 }
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
@@ -575,9 +612,10 @@ void EpollClasse::closeConnection(int fd)
 }
 
 // Gérer les erreurs
-void EpollClasse::handleError(int fd)
+void EpollClasse::handleError_impl(int fd, const char* file, int line, const char* caller)
 {
-    Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD: %d", fd);
+    Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD %d in %s:%d called by %s: %s", 
+                   fd, file, line, caller, strerror(errno));
     closeConnection(fd);
 }
 
