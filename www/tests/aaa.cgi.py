@@ -5,12 +5,15 @@ import os
 import time
 import signal
 import urllib.parse
+import random
 
 def timeout_handler(signum, frame):
     # Timeout handler for CGI script
     raise TimeoutError("CGI script timed out")
 
 def main():
+    time.sleep(4)  # Simulate some processing delay
+    random_number = random.randint(1, 1000)
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(10)  # set timeout to 10 seconds
     try:
@@ -71,6 +74,8 @@ def main():
         html += """
             </ul>
         """
+        if random_number:
+            html += f"<h2>Random Number</h2><p>{random_number}</p>"
         if body is not None:
             # Only add body sections for POST requests
             html += """
