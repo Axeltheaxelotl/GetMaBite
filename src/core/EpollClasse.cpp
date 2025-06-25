@@ -14,6 +14,7 @@
 #include "../http/RequestBufferManager.hpp"
 #include "../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
+#include "../http/MultipartParser.hpp"
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -275,6 +276,7 @@ void EpollClasse::handleRequest(int client_fd) {
 
     std::string request = _bufferManager.get(client_fd);
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
+
     _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP
@@ -289,8 +291,46 @@ void EpollClasse::handleRequest(int client_fd) {
     if (path.empty())
         path = "/";
 
-    // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
-    const Server& server = _serverConfigs[0];
+    // Extract Host header and select server
+    std::string host;
+    int port = 80;
+    {
+        size_t headerEnd = request.find("\r\n\r\n");
+        size_t hostPos = request.find("\r\nHost:");
+        if (hostPos != std::string::npos && hostPos < headerEnd) {
+            size_t lineEnd = request.find("\r\n", hostPos + 2);
+            std::string hostLine = request.substr(hostPos + 2, lineEnd - (hostPos + 2)); // "Host: value"
+            std::string hostValue = hostLine.substr(6); // after "Host: "
+            // trim
+            while (!hostValue.empty() && (hostValue[0] == ' ' || hostValue[0] == '\t'))
+                hostValue.erase(0, 1);
+            while (!hostValue.empty() && (hostValue[hostValue.size() - 1] == ' ' || hostValue[hostValue.size() - 1] == '\t'))
+                hostValue.erase(hostValue.size() - 1, 1);
+            size_t colon = hostValue.find(':');
+            if (colon != std::string::npos) {
+                host = hostValue.substr(0, colon);
+                port = std::atoi(hostValue.substr(colon + 1).c_str());
+            } else {
+                host = hostValue;
+            }
+        }
+    }
+    int serverIndex = findMatchingServer(host, port);
+    if (serverIndex == -1) {
+        sendErrorResponse(client_fd, 404, _serverConfigs[0]);
+        closeConnection(client_fd);
+        return;
+    }
+    const Server& server = _serverConfigs[serverIndex];
+    // Enforce client_max_body_size
+    size_t headerEnd = request.find("\r\n\r\n");
+    size_t bodySize = (headerEnd != std::string::npos) ? request.size() - (headerEnd + 4) : 0;
+    if (bodySize > static_cast<size_t>(server.client_max_body_size)) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Payload too large: %zu bytes (limit %d)", bodySize, server.client_max_body_size);
+        sendErrorResponse(client_fd, 413, server);
+        closeConnection(client_fd);
+        return;
+    }
 
     // Trouver la location correspondante (plus long préfixe)
     const Location* matchedLocation = NULL;
@@ -506,49 +546,49 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
 {
-    // Separate headers and body
+    // Séparer headers et body
     size_t header_end = request.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
-        sendErrorResponse(client_fd, 400, _serverConfigs[0]);
-        closeConnection(client_fd);
-        return;
-    }
-    std::string body = request.substr(header_end + 4);
+    std::string header = request.substr(0, header_end);
+    std::string body = (header_end != std::string::npos) ? request.substr(header_end + 4) : "";
 
-    // Determine storage path; if target is a directory, generate unique filename
-    std::string targetPath = filePath;
-    struct stat st;
-    if (stat(targetPath.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
-        std::ostringstream fname;
-        fname << targetPath << "/upload_" << time(NULL);
-        targetPath = fname.str();
-    } else {
-        // Ensure parent directory exists
-        size_t slash = targetPath.find_last_of('/');
-        if (slash != std::string::npos) {
-            std::string dir = targetPath.substr(0, slash);
-            mkdir(dir.c_str(), 0755);
+    // Extraire Content-Type
+    std::string contentType;
+    std::istringstream hs(header);
+    std::string line;
+    while (std::getline(hs, line) && !line.empty()) {
+        if (line.find("Content-Type:") == 0) {
+            contentType = line.substr(14);
+            break;
         }
     }
 
-    // Write raw body to file (no multipart parsing)
-    std::ofstream ofs(targetPath.c_str(), std::ios::binary);
-    if (!ofs) {
-        sendErrorResponse(client_fd, 403, _serverConfigs[0]);
-        closeConnection(client_fd);
-        return;
+    const std::string multipart = "multipart/form-data; boundary=";
+    if (contentType.find(multipart) == 0) {
+        // Upload multipart
+        std::string boundary = contentType.substr(multipart.size());
+        std::vector<MultipartPart> parts = MultipartParser::parse(body, boundary);
+        for (size_t i = 0; i < parts.size(); ++i) {
+            const MultipartPart &p = parts[i];
+            if (!p.filename.empty()) {
+                std::string dst = filePath + "/" + p.filename;
+                std::ofstream ofs(dst.c_str(), std::ios::binary);
+                ofs.write(p.data.data(), p.data.size());
+            }
+        }
+        std::ostringstream resp;
+        resp << "HTTP/1.1 201 Created\r\n"
+             << "Content-Length: 0\r\n\r\n";
+        sendResponse(client_fd, resp.str());
+    } else {
+        // Upload simple
+        std::ofstream ofs(filePath.c_str(), std::ios::binary);
+        ofs.write(body.data(), body.size());
+        std::ostringstream resp;
+        resp << "HTTP/1.1 201 Created\r\n"
+             << "Content-Length: " << body.size() << "\r\n\r\n"
+             << body;
+        sendResponse(client_fd, resp.str());
     }
-    ofs.write(body.data(), body.size());
-    ofs.close();
-
-    // Send response
-    std::string msg = "Uploaded to " + targetPath;
-    std::ostringstream response;
-    response << "HTTP/1.1 201 Created\r\n"
-             << "Content-Type: text/plain\r\n"
-             << "Content-Length: " << msg.size() << "\r\n\r\n"
-             << msg;
-    sendResponse(client_fd, response.str());
     closeConnection(client_fd);
 }
 
@@ -735,11 +775,32 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
             body = ss.str();
             file.close();
         } else {
-            // Fichier non trouvé, fallback sur la page par défaut
-            body = ErreurDansTaGrosseDaronne(code);
+            // Fallback: try default error page in www/errors/<code>.html
+            std::ostringstream defaultPath;
+            defaultPath << "www/errors/" << code << ".html";
+            std::ifstream defaultFile(defaultPath.str().c_str());
+            if (defaultFile.is_open()) {
+                std::ostringstream ssDefault;
+                ssDefault << defaultFile.rdbuf();
+                body = ssDefault.str();
+                defaultFile.close();
+            } else {
+                body = ErreurDansTaGrosseDaronne(code);
+            }
         }
     } else {
-        body = ErreurDansTaGrosseDaronne(code);
+        // No custom error page, try default directory
+        std::ostringstream defaultPath;
+        defaultPath << "www/errors/" << code << ".html";
+        std::ifstream defaultFile(defaultPath.str().c_str());
+        if (defaultFile.is_open()) {
+            std::ostringstream ssDefault;
+            ssDefault << defaultFile.rdbuf();
+            body = ssDefault.str();
+            defaultFile.close();
+        } else {
+            body = ErreurDansTaGrosseDaronne(code);
+        }
     }
     std::ostringstream response;
     response << "HTTP/1.1 " << code << " " << status << "\r\n"

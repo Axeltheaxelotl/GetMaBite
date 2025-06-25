@@ -351,137 +351,70 @@ Dans le cadre de Webserv, la RFC 7230 (et les autres RFC liées à HTTP/1.1) est
 - Une conformité aux bonnes pratiques pour éviter des comportements imprévus.
 
 
+Voici, de la tâche la plus simple à la plus complexe, un inventaire des points manquants ou à améliorer pour coller au sujet :
 
+1. **Pages d’erreur par défaut**  
+   Si `server.error_pages` ne contient pas un code, générez une page HTML standard (403, 404, 500, …) au lieu d’un simple message via `StatusCodeString`+`ErreurDansTaGrosseDaronne`.
 
+2. **Enforcement de `client_max_body_size`**  
+   Après avoir reçu toute la requête, vérifiez que la taille du corps ne dépasse pas `server.client_max_body_size` et renvoyez 413 si besoin.
 
+3. **Parsing de l’en-tête `Host`**  
+   Dans `handleRequest`, extrayez l’en-tête `Host:` (hôte[:port]) et ne prenez plus toujours `_serverConfigs[0]`.
 
+4. **Sélection du bon serveur**  
+   Remplacez l’accès statique à `_serverConfigs[0]` par un appel à `findMatchingServer(host, port)` et gérez le retour `-1` (404).
 
+5. **Boucle d’événements complète**  
+   Implémentez `EpollClasse::serverRun()` :  
+   - dispatch : si FD de serveur → `acceptConnection()`  
+   - si EPOLLIN → `handleRequest()`  
+   - si EPOLLOUT → flush du tampon de réponse (mettre en place EPOLLOUT dans `sendResponse`)  
+   - si événement sur STDIN → quitter  
 
+6. **Non-blocage écriture (EPOLLOUT)**  
+   Votre `sendResponse` court-circuité en blocant sur `write()`. Il faut écrire en plusieurs fois et ré-enregistrer l’EPOLLOUT si `EAGAIN`.
 
-• Le programme doit prendre un fichier de configuration en argument ou utiliser un chemin par default.
-• Vous ne pouvez pas exécuter un autre serveur web
-• Votre serveur ne doit jamais bloquer et le client doit être correctement renvoyé si
-nécessaire
-• Il doit être non bloquant et n’utiliser qu’un seul epoll() pour
-toutes les opérations entrées/sorties entre le client et le serveur
-• epoll() doit verifier la lecture et l ecriture en meme temps
-• Vous ne devriez jamais faire une opération de lecture ou une opération d’écriture sans passer par epoll()
-• La vérification de la valeur de errno est strictement interdite après une opération de lecture ou d’écriture.
-• Vous n’avez pas besoin d’utiliser epoll() (ou équivalent) avant de lire votre fichier de configuration.
-• Vous pouvez utiliser chaque macro et définir comme FD_SET, FD_CLR, FD_ISSET,
-FD_ZERO (comprendre ce qu’elles font et comment elles le font est très utile).
-• Une requête à votre serveur ne devrait jamais se bloquer pour indéfiniment.
-• Votre serveur doit être compatible avec le navigateur web de votre choix.
-• Nous considérerons que NGINX est conforme à HTTP 1.1 et peut être utilisé pour
-comparer les en-têtes et les comportements de réponse.
-• Vos codes d’état de réponse HTTP doivent être exacts.
-• Votre serveur doit avoir des pages d’erreur par défaut si aucune n’est fournie.
-• Vous ne pouvez pas utiliser fork pour autre chose que CGI (comme PHP ou Python,
-etc).
-• Vous devriez pouvoir servir un site web entièrement statique.
-• Le client devrait pouvoir téléverser des fichiers.
-• Vous avez besoin au moins des méthodes GET, POST, et DELETE
-• Stress testez votre serveur, il doit rester disponible à tout prix.
-• Votre serveur doit pouvoir écouter sur plusieurs ports (cf. Fichier de configuration).
+7. **Gestion de la méthode HEAD**  
+   Répondre à un HEAD avec les mêmes en-têtes que GET mais sans corps.
 
-Vous pouvez vous inspirer de la partie "serveur" du fichier de
-configuration NGINX.
-Dans ce fichier de configuration, vous devez pouvoir :
-• Choisir le port et l’host de chaque "serveur".
-• Setup server_names ou pas.
-• Le premier serveur pour un host:port sera le serveur par défaut pour cet host:port
-(ce qui signifie qu’il répondra à toutes les requêtes qui n’appartiennent pas à un
-autre serveur).
-• Setup des pages d’erreur par défaut.
-• Limiter la taille du body des clients.
-• Setup des routes avec une ou plusieurs des règles/configurations suivantes (les
-routes n’utiliseront pas de regexp) :
-◦ Définir une liste de méthodes HTTP acceptées pour la route.
-◦ Définir une redirection HTTP.
-◦ Définir un répertoire ou un fichier à partir duquel le fichier doit être recherché
-(par exemple si l’url /kapouet est rootée sur /tmp/www, l’url /kapouet/pouic/toto/pouet
-est /tmp/www/pouic/toto/pouet).
-◦ Activer ou désactiver le listing des répertoires.
-7
-Webserv C’est le moment de comprendre pourquoi les URLs commencent par HTTP !
-◦ Set un fichier par défaut comme réponse si la requête est un répertoire.
-◦ Exécuter CGI en fonction de certaines extensions de fichier (par exemple .php).
-◦ Faites-le fonctionner avec les méthodes POST et GET.
-◦ Rendre la route capable d’accepter les fichiers téléversés et configurer où cela
-doit être enregistré.
-— Vous vous demandez ce qu’est un CGI ?
-— Parce que vous n’allez pas appeler le CGI mais utiliser directement le chemin
-complet comme PATH_INFO.
-— Souvenez-vous simplement que pour les requêtes fragmentées, votre serveur
-doit la dé-fragmenter et le CGI attendra EOF comme fin du body.
-— Même choses pour la sortie du CGI. Si aucun content_length n’est renvoyé
-par le CGI, EOF signifiera la fin des données renvoyées.
-— Votre programme doit appeler le CGI avec le fichier demandé comme premier argument.
-— Le CGI doit être exécuté dans le bon répertoire pour l’accès au fichier de
-chemin relatif.
-— votre serveur devrait fonctionner avec un seul CGI (php-CGI, Python, etc.).
-Vous devez fournir des fichiers de configuration et des fichiers de base par défaut pour
-tester et démontrer que chaque fonctionnalité fonctionne pendant l’évaluation.
+8. **Index par défaut**  
+   Quand `resolvedPath` est un répertoire, ouvrez `server.index` si présent, sinon 403/404 ou autoindex.
 
+9. **AutoIndex**  
+   Activez/désactivez la génération de listing (votre `AutoIndex::generateAutoIndexPage`) selon `location.autoindex`.
 
+10. **Directive `return` (redirection)**  
+    Si `location.return_code`≠0, renvoyez une réponse 3xx via `RedirectionHandler::generateRedirectReponse`.
 
+11. **Alias vs Root**  
+    Complétez `resolvePath` pour prendre en compte correctement `location.root` ET `location.alias` comme dans NGINX (chemins relatifs, suppression de “/”).
 
+12. **CGI complet**  
+    - Mettez en place la détection automatique d’extension (via `server.cgi_extensions`).  
+    - Gérez l’absence de `Content-Length` de la sortie CGI (détecter EOF).  
+    - Assurez-vous de `chdir` dans le bon répertoire avant `execve`.  
 
+13. **Upload de fichiers (multipart/form-data)**  
+    Dans `handlePostRequest`, parsez et enregistrez chaque partie via `MultipartParser`, respectez `location.upload_path` et `client_max_body_size`.
 
+14. **Connections persistantes (keep-alive)**  
+    Gérez l’en-tête `Connection: keep-alive` et conservez la socket ouverte pour plusieurs requêtes.
 
+15. **Requêtes partielles / Range**  
+    Implémentez l’en-tête `Range` (206 Partial Content) si nécessaire.
 
+16. **Chunked Transfer Encoding**  
+    Pour les réponses dynamiques ou fichiers volumineux sans connaître la taille à l’avance.
 
+17. **Timeout et nettoyage**  
+    Dans `serverRun`, appliquez `timeoutManager.getTimedOutClients()` pour déconnecter les clients inactifs.
 
+18. **Tests de montée en charge & résilience**  
+    - Scripts de stress (ab, siege, wrk…)  
+    - Tests unitaires / mocks pour `Parser`, `AutoIndex`, `MultipartParser`, etc.
 
+19. **Conformité RFC / edge-cases HTTP**  
+    Prenez NGINX comme référence (statuts, encodages, entêtes invalides, requêtes pipelinées…).
 
-
-
-
-
-
-
-
-
-
-• Beaucoup de directives non traitées (server_name, root/alias, methods, error_page, cgi_extensions…)
-• Pas de client_max_body_size, pages d’erreur par défaut, redirections, autoindex, upload_path
-
-          epoll & non-blocage
-          • Seulement EPOLLIN, jamais EPOLLOUT
-          • read()/write() hors epoll (bloquant)
-          • Vérification d’errno après I/O (interdit)
-
-CGI
-• setCgiHeaders() inutilisé
-• Corps POST mis en ENV au lieu du stdin
-• Pas de vars CGI standard (CONTENT_TYPE, PATH_INFO…)
-• Pas de chdir() avant execve
-• Lecture bloquante des pipes CGI
-
-Upload & multipart
-• Pas de parsing multipart/form-data
-• handlePostRequest() vide, pas d’écriture disque
-
-          GET/HEAD/DELETE
-          • Pas de HEAD spécifique
-          • Implémentations non vérifiées
-
-          Timeout & nettoyage
-          • TimeoutManager non intégré à la boucle epoll
-          • FDs non fermés sur erreur
-
-Routing & virtual hosts
-• Deux handlers redondants (ServerNameHandler vs ServerRouter)
-• Pas de serveur par défaut si host inconnu
-
-Pages d’erreur
-• error_pages jamais lues ni servies
-• Utils::ErreurDansTaGrosseDaronne non utilisé
-
-Robustesse & sécurité
-• Fuites de FDs en cas d’erreur
-• substr/find_last_of sans test de npos
-
-Tests & HTTP1.1
-• Peu ou pas de tests unitaires/intégration
-• En-têtes (keep-alive, chunked…) pas validés
+En suivant cet ordre, vous allez d’abord stabiliser le cœur (erreurs, sélection de serveur, boucle epoll), puis monter en fonctionnalités (index, autoindex, redirections), avant d’aborder CGI/Uploads, persistance et optimisation.
