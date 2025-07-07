@@ -1,0 +1,1 @@
+// Logger.cpp is intentionally left empty; Logger is implemented header-only

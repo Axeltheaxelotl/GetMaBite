@@ -15,7 +15,6 @@ class Server
 		std::string root;
 		std::string index;
 		std::vector<std::string> allow_methods;
-		std::string upload_path;
 
 		int client_max_body_size;
 		std::map<int, std::string> error_pages;

@@ -32,7 +32,6 @@ SRCS      = src/main.cpp \
             src/routes/RedirectionHandler.cpp \
             src/routes/AutoIndex.cpp \
             src/http/RequestBufferManager.cpp \
-            src/http/MultipartParser.cpp \
             src/cgi/CgiHandler.cpp
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))

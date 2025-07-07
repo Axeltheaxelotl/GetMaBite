@@ -6,7 +6,7 @@
 /*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/06/20 15:49:02 by smasse           ###   ########.fr       */
+/*   Updated: 2025/06/12 18:31:00 by smasse           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -320,10 +320,6 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			if(currentLocation)
 			{
 				currentLocation->upload_path = resolvePath((!currentLocation->root.empty() ? currentLocation->root : (currentServer ? currentServer->root : "")), path);
-			}
-			else if(currentServer)
-			{
-				currentServer->upload_path = resolvePath(currentServer->root, path);
 			}
 		}
 		else if(directive == "autoindex")
