@@ -265,8 +265,45 @@ void EpollClasse::handleRequest(int client_fd) {
     if (path.empty())
         path = "/";
 
-    // On utilise le premier serveur pour l'instant (à améliorer pour gérer plusieurs serveurs)
-    const Server& server = _serverConfigs[0];
+    // Extract host header and route to appropriate server
+    std::string hostHeader;
+    {
+        size_t pos = request.find("Host:");
+        if (pos != std::string::npos) {
+            pos += 5;
+            size_t end = request.find("\r\n", pos);
+            hostHeader = request.substr(pos, end - pos);
+            // trim whitespace
+            while (!hostHeader.empty() && isspace(hostHeader[0])) hostHeader.erase(0, 1);
+            while (!hostHeader.empty() && isspace(hostHeader[hostHeader.size() - 1])) hostHeader.erase(hostHeader.size() - 1, 1);
+        }
+    }
+    // Determine local listening port
+    int port = 0;
+    {
+        struct sockaddr_in addr;
+        socklen_t len = sizeof(addr);
+        if (getsockname(client_fd, (struct sockaddr*)&addr, &len) == 0)
+            port = ntohs(addr.sin_port);
+    }
+    // Parse host and optional port
+    std::string hostName = hostHeader;
+    if (!hostHeader.empty()) {
+        size_t colon = hostHeader.find(':');
+        if (colon != std::string::npos) {
+            std::string portStr = hostHeader.substr(colon + 1);
+            hostName = hostHeader.substr(0, colon);
+            bool allDigits = true;
+            for (size_t i = 0; i < portStr.size(); ++i) {
+                if (!isdigit(static_cast<unsigned char>(portStr[i]))) { allDigits = false; break; }
+            }
+            if (allDigits)
+                port = std::atoi(portStr.c_str());
+        }
+    }
+    int idx = findMatchingServer(hostName, port);
+    if (idx < 0) idx = 0;
+    const Server& server = _serverConfigs[idx];
 
     // Trouver la location correspondante (plus long préfixe)
     const Location* matchedLocation = NULL;

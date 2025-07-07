@@ -6,10 +6,10 @@ Voici une to-do list, classée du plus simple au plus complexe, suivie des point
               - Uniformiser les `#include` C vs C++ (`<cstring>` plutôt que `<string.h>`, etc.).  
               - Corriger le commentaire du constructeur `TimeoutManager(10)` (timeout en secondes) si l’intention était 60 s.
 
-## 2. Nettoyage & robustesse  
+              ## 2. Nettoyage & robustesse  
               - Gérer proprement le cas où `Parser` rencontre une directive inconnue sans `exit()`.  
               - Centraliser la gestion des erreurs et éviter les `exit(1)` dispersés (préférer lever exception ou retourner un code d’erreur).  
-- Remplacer tous les `printf`/`vprintf` par des `std::cout` + `vfprintf(stderr,…)` pour ne pas mixer iostream et stdio.
+              - Remplacer tous les `printf`/`vprintf` par des `std::cout` + `vfprintf(stderr,…)` pour ne pas mixer iostream et stdio.
 
 ## 3. Fonctionnalités manquantes ou incomplètes  
 - **Parsing de l’en-tête `Host`** et appel à `findMatchingServer(host, port)` au lieu de `serverConfigs[0]`.  
@@ -31,8 +31,8 @@ Voici une to-do list, classée du plus simple au plus complexe, suivie des point
 - Vérifier la conformité des codes de statut et les headers minimaux (`Connection`, `Content‐Type`, `Content‐Length`).  
 - Faire des tests automatisés (curl, Python, navigateur) pour GET, POST (upload), DELETE, CGI, redirections, auto-indexing.
 
-## Points d’implémentation à revoir  
-- Vous acceptez trop vite `serverConfigs[0]` : il faut router selon l’en-tête `Host`.  
+               ## Points d’implémentation à revoir  
+              - Vous acceptez trop vite `serverConfigs[0]` : il faut router selon l’en-tête `Host`.  
 - Le parsing CGI (récupération des paramètres via `rfind("?")` sur le chemin système) est incorrect : il faut extraire la query string avant de résoudre le chemin de fichier.  
 - `TimeoutManager` est initialisé à 10 s alors que le commentaire indique 60 s.  
 - Dans Utils.hpp, vous déclarez deux fois la même fonction.  
