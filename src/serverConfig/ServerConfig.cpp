@@ -3,6 +3,7 @@
 #include <cstdlib> // Ajouté pour exit
 #include <cstring> // Ajouté pour memset et strerror
 #include <sstream> // Ajouté pour std::ostringstream
+#include <stdexcept> // Pour std::runtime_error
 
 ServerConfig::ServerConfig(const std::string &host, int port)
     : _host(host), _port(port), _server_fd(-1)
@@ -36,15 +37,13 @@ void ServerConfig::setupServer()
 {
     // Fermer le socket s'il était déjà ouvert
     if (_server_fd != -1)
-    {
-        close(_server_fd);
-    }
+    {   close(_server_fd); }
 
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Socket creation error: %s", strerror(errno));
-        exit(1);
+        throw std::runtime_error(std::string("Socket creation error: ") + strerror(errno));
     }
 
     // Configuration des options du socket
@@ -53,7 +52,7 @@ void ServerConfig::setupServer()
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Setsockopt error: %s", strerror(errno));
         close(_server_fd);
-        exit(1);
+        throw std::runtime_error(std::string("Setsockopt error: ") + strerror(errno));
     }
 
     // Mode non-bloquant
@@ -62,27 +61,27 @@ void ServerConfig::setupServer()
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
         close(_server_fd);
-        exit(1);
+        throw std::runtime_error(std::string("Fcntl error: ") + strerror(errno));
     }
     if (fcntl(_server_fd, F_SETFL, flags | O_NONBLOCK) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
         close(_server_fd);
-        exit(1);
+        throw std::runtime_error(std::string("Fcntl error: ") + strerror(errno));
     }
 
     if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Bind error: %s", strerror(errno));
         close(_server_fd);
-        exit(1);
+        throw std::runtime_error(std::string("Bind error: ") + strerror(errno));
     }
 
     if (listen(_server_fd, SOMAXCONN) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Listen error: %s", strerror(errno));
         close(_server_fd);
-        exit(1);
+        throw std::runtime_error(std::string("Listen error: ") + strerror(errno));
     }
 
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Server listening on %s:%d", _host.c_str(), _port);

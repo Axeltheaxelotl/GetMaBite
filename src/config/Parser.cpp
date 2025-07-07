@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        */
+/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/06/12 18:31:00 by smasse           ###   ########.fr       */
+/*   Updated: 2025/07/07 11:01:11 by alanty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -355,8 +355,8 @@ std::vector<Server> parseConfig(const std::string &filepath)
 		}
 		else
 		{
-			std::cerr << "Error: unknown directive: " << directive << std::endl;
-			return std::vector<Server>(); // error return
+			std::cerr << "Warning: unknown directive: " << directive << ", ignoring." << std::endl;
+			continue;
 		}
 	}
 	if(!validateServers(servers))

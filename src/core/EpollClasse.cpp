@@ -13,6 +13,7 @@
 #include "../http/RequestBufferManager.hpp"
 #include "../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
+#include <stdexcept> // Pour gestion des erreurs par exceptions
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -57,7 +58,7 @@ EpollClasse::EpollClasse() : timeoutManager(60) // Initialize TimeoutManager wit
     if (_epoll_fd == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll creation error: %s", strerror(errno));
-        exit(EXIT_FAILURE);
+        throw std::runtime_error(std::string("Epoll creation error: ") + strerror(errno));
     }
     _biggest_fd = 0;
 }
@@ -102,7 +103,7 @@ void EpollClasse::serverRun() {
         int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // Timeout of 1 second
         if (event_count == -1) {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll wait error: %s", strerror(errno));
-            exit(EXIT_FAILURE);
+            throw std::runtime_error(std::string("Epoll wait error: ") + strerror(errno));
         }
 
         for (int i = 0; i < event_count; ++i) {
@@ -137,7 +138,7 @@ void EpollClasse::addToEpoll(int fd, epoll_event &event)
     if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1)
     {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Epoll add error (FD: %d): %s", fd, strerror(errno));
-        exit(EXIT_FAILURE);
+        throw std::runtime_error(std::string("Epoll add error (FD: ") + sizeToString(fd) + "): " + strerror(errno));
     }
 
     if (fd > _biggest_fd)

@@ -1,14 +1,14 @@
 Voici une to-do list, classée du plus simple au plus complexe, suivie des points d’implémentation à revoir :
 
-## 1. Tâches simples  
-- Supprimer la déclaration dupliquée de `ErreurDansTaGrosseDaronne` dans **Utils.hpp**.  
-- Enlever ou compléter le fichier vide **Logger.cpp** (le logger est déjà header-only).  
-- Uniformiser les `#include` C vs C++ (`<cstring>` plutôt que `<string.h>`, etc.).  
-- Corriger le commentaire du constructeur `TimeoutManager(10)` (timeout en secondes) si l’intention était 60 s.
+              ## 1. Tâches simples  
+              - Supprimer la déclaration dupliquée de `ErreurDansTaGrosseDaronne` dans **Utils.hpp**.  
+              - Enlever ou compléter le fichier vide **Logger.cpp** (le logger est déjà header-only).  
+              - Uniformiser les `#include` C vs C++ (`<cstring>` plutôt que `<string.h>`, etc.).  
+              - Corriger le commentaire du constructeur `TimeoutManager(10)` (timeout en secondes) si l’intention était 60 s.
 
 ## 2. Nettoyage & robustesse  
-- Gérer proprement le cas où `Parser` rencontre une directive inconnue sans `exit()`.  
-- Centraliser la gestion des erreurs et éviter les `exit(1)` dispersés (préférer lever exception ou retourner un code d’erreur).  
+              - Gérer proprement le cas où `Parser` rencontre une directive inconnue sans `exit()`.  
+              - Centraliser la gestion des erreurs et éviter les `exit(1)` dispersés (préférer lever exception ou retourner un code d’erreur).  
 - Remplacer tous les `printf`/`vprintf` par des `std::cout` + `vfprintf(stderr,…)` pour ne pas mixer iostream et stdio.
 
 ## 3. Fonctionnalités manquantes ou incomplètes  
