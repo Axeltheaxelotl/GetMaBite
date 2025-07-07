@@ -1,6 +1,7 @@
 #include "RequestBufferManager.hpp"
 #include <cstdlib>
 #include <cstdio>
+#include <iostream>
 
 void RequestBufferManager::append(int client_fd, const std::string& data) {
     buffers[client_fd] += data;
@@ -34,8 +35,8 @@ bool RequestBufferManager::isRequestComplete(int client_fd) {
             size_t body_start = header_end + 4;
             size_t body_received = buf.size() - body_start;
             // Ajout du log de debug
-            printf("[isRequestComplete] fd %d: Content-Length=%d, body_received=%zu\n", client_fd, content_length, body_received);
-            printf("[isRequestComplete] fd %d: body=\"%s\"\n", client_fd, buf.substr(body_start, body_received).c_str());
+            std::cout << "[isRequestComplete] fd " << client_fd << ": Content-Length=" << content_length << ", body_received=" << body_received << std::endl;
+            std::cout << "[isRequestComplete] fd " << client_fd << ": body=\"" << buf.substr(body_start, body_received) << "\"" << std::endl;
             return body_received >= (size_t)content_length;
         }
     }

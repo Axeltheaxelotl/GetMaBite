@@ -20,9 +20,10 @@ public:
         va_start(args, format);
         if (output == CONSOLE_OUTPUT)
         {
-            std::cout << color;
-            vprintf(format, args);
-            std::cout << "\033[0m" << std::endl;
+            // Use std::cerr and vfprintf to avoid mixing iostream and stdio
+            std::cerr << color;
+            vfprintf(stderr, format, args);
+            std::cerr << "\033[0m" << std::endl;
         }
         va_end(args);
     }
