@@ -270,6 +270,9 @@ void EpollClasse::handleRequest(int client_fd) {
 
     if (path.empty())
         path = "/";
+    // Implement HEAD support: treat HEAD as GET and suppress body
+    bool isHead = (method == "HEAD");
+    std::string reqMethod = isHead ? "GET" : method;
 
     // Extract host header and route to appropriate server
     std::string hostHeader;
@@ -329,7 +332,7 @@ void EpollClasse::handleRequest(int client_fd) {
         bool allowed = false;
         for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
         {
-            if (matchedLocation->allow_methods[i] == method)
+            if (matchedLocation->allow_methods[i] == reqMethod)
             {
                 allowed = true;
                 break;
@@ -359,14 +362,12 @@ void EpollClasse::handleRequest(int client_fd) {
     }
     else
     {
-        // Si aucune location ne matche, vérifier allow_methods du server (ou GET par défaut)
         bool allowed = false;
         if (!server.locations.empty()) {
-            // Si le server a une location "/", on peut utiliser ses allow_methods
             for (size_t i = 0; i < server.locations.size(); ++i) {
                 if (server.locations[i].path == "/") {
                     for (size_t j = 0; j < server.locations[i].allow_methods.size(); ++j) {
-                        if (server.locations[i].allow_methods[j] == method) {
+                        if (server.locations[i].allow_methods[j] == reqMethod) {
                             allowed = true;
                             break;
                         }
@@ -375,7 +376,7 @@ void EpollClasse::handleRequest(int client_fd) {
             }
         }
         // Si pas de location /, GET seulement autorisé par défaut
-        if (!allowed && method == "GET")
+        if (!allowed && reqMethod == "GET")
             allowed = true;
         if (!allowed) {
             std::string allowHeader = "Allow: GET";
@@ -464,16 +465,16 @@ void EpollClasse::handleRequest(int client_fd) {
 			}
 		}
         // Le fichier existe, on le traite selon la méthode
-        else if (method == "GET" || method == "HEAD")
+        else if (reqMethod == "GET")
         {
             // Passer cookies à handleGetRequest (à modifier dans la signature)
-            handleGetRequest(client_fd, resolvedPath, server, method == "HEAD");
+            handleGetRequest(client_fd, resolvedPath, server, isHead);
         }
-        else if (method == "POST")
+        else if (reqMethod == "POST")
         {
             handlePostRequest(client_fd, request, resolvedPath, server);
         }
-        else if (method == "DELETE")
+        else if (reqMethod == "DELETE")
         {
             handleDeleteRequest(client_fd, resolvedPath, server);
         }

@@ -9,11 +9,19 @@
               - Remplacer tous les `printf`/`vprintf` par des `std::cout` + `vfprintf(stderr,…)` pour ne pas mixer iostream et stdio.
 
 ## 3. Fonctionnalités manquantes ou incomplètes  
-              - **Parsing de l’en-tête `Host`** et appel à `findMatchingServer(host, port)` au lieu de `serverConfigs[0]`.  
+              - **Parsing de l’en-tête `Host`** et appel à `findMatchingServer(host, port)` au lieu de `serverConfigs[0]`. 
+
+
+
+SIMON<<>>
 - Détection et exécution de CGI :  
   - Dans `EpollClasse::handleRequest`, tester l’extension contre `server.cgi_extensions` ou `location.cgi_extensions`.  
-  - Appeler `handleCGI(...)` plutôt que stat/serve statique.  
-- Implémenter la méthode **HEAD** (identique à GET sans body).  
+  - Appeler `handleCGI(...)` plutôt que stat/serve statique.
+
+
+
+
+                - Implémenter la méthode **HEAD** (identique à GET sans body).  
 - Respecter `Location::return_code`/`return_url` (directive `return`) avant tout autre traitement.  
 - Traiter la directive `upload_path` (POST → enregistrer sous ce chemin).
 
