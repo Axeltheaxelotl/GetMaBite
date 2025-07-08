@@ -1,6 +1,3 @@
-Voici une to-do list, classée du plus simple au plus complexe, suivie des points d’implémentation à revoir :
-
-              ## 1. Tâches simples  
               - Supprimer la déclaration dupliquée de `ErreurDansTaGrosseDaronne` dans **Utils.hpp**.  
               - Enlever ou compléter le fichier vide **Logger.cpp** (le logger est déjà header-only).  
               - Uniformiser les `#include` C vs C++ (`<cstring>` plutôt que `<string.h>`, etc.).  
@@ -12,7 +9,7 @@ Voici une to-do list, classée du plus simple au plus complexe, suivie des point
               - Remplacer tous les `printf`/`vprintf` par des `std::cout` + `vfprintf(stderr,…)` pour ne pas mixer iostream et stdio.
 
 ## 3. Fonctionnalités manquantes ou incomplètes  
-- **Parsing de l’en-tête `Host`** et appel à `findMatchingServer(host, port)` au lieu de `serverConfigs[0]`.  
+              - **Parsing de l’en-tête `Host`** et appel à `findMatchingServer(host, port)` au lieu de `serverConfigs[0]`.  
 - Détection et exécution de CGI :  
   - Dans `EpollClasse::handleRequest`, tester l’extension contre `server.cgi_extensions` ou `location.cgi_extensions`.  
   - Appeler `handleCGI(...)` plutôt que stat/serve statique.  

@@ -52,7 +52,7 @@ static std::string smartJoinRootAndPath(const std::string& root, const std::stri
 }
 
 // Constructeur
-EpollClasse::EpollClasse() : timeoutManager(60) // Initialize TimeoutManager with a 60-second timeout
+EpollClasse::EpollClasse() : timeoutManager(10)
 {
     _epoll_fd = epoll_create1(0);
     if (_epoll_fd == -1)
@@ -159,16 +159,22 @@ bool EpollClasse::isServerFd(int fd) {
 
 // Trouve un serveur correspondant à un hôte et un port donnés.
 int EpollClasse::findMatchingServer(const std::string& host, int port) {
+    int defaultIndex = -1;
     for (size_t i = 0; i < _serverConfigs.size(); ++i) {
-        const Server& server = _serverConfigs[i];
-        // Ensure the type of listen_ports matches std::find's requirements
-        if (std::find(server.listen_ports.begin(), server.listen_ports.end(), port) != server.listen_ports.end()) {
-            if (ServerNameHandler::isServerNameMatch(server.server_names, host)) {
-                return i;
+        const Server& srv = _serverConfigs[i];
+        // Check if server listens on requested port
+        if (std::find(srv.listen_ports.begin(), srv.listen_ports.end(), port) != srv.listen_ports.end()) {
+            if (defaultIndex == -1)
+                defaultIndex = i;
+            // Look for exact host match among server_names
+            for (size_t j = 0; j < srv.server_names.size(); ++j) {
+                if (srv.server_names[j] == host)
+                    return i;
             }
         }
     }
-    return -1; // No matching server found
+    // Return default server for port if no host match found (may be -1)
+    return defaultIndex;
 }
 
 // Accepter une connexion
@@ -465,11 +471,11 @@ void EpollClasse::handleRequest(int client_fd) {
         }
         else if (method == "POST")
         {
-            handlePostRequest(client_fd, request, resolvedPath);
+            handlePostRequest(client_fd, request, resolvedPath, server);
         }
         else if (method == "DELETE")
         {
-            handleDeleteRequest(client_fd, resolvedPath);
+            handleDeleteRequest(client_fd, resolvedPath, server);
         }
         else
         {
@@ -516,13 +522,13 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 	sendResponse(client_fd, response);
 }
 
-void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath)
+void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server)
 {
     // Trouver le début du corps de la requête
     size_t body_pos = request.find("\r\n\r\n");
     if (body_pos == std::string::npos)
     {
-        sendErrorResponse(client_fd, 400, _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, server);
         close(client_fd);
         return;
     }
@@ -541,12 +547,12 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &request, c
     }
     else
     {
-        sendErrorResponse(client_fd, 403, _serverConfigs[0]);
+        sendErrorResponse(client_fd, 403, server);
     }
     close(client_fd);
 }
 
-void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath)
+void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath, const Server &server)
 {
     if (remove(filePath.c_str()) == 0)
     {
@@ -555,7 +561,7 @@ void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath
     }
     else
     {
-        sendErrorResponse(client_fd, 404, _serverConfigs[0]);
+        sendErrorResponse(client_fd, 404, server);
     }
     close(client_fd);
 }
