@@ -756,7 +756,21 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
             body = ErreurDansTaGrosseDaronne(code);
         }
     } else {
-        body = ErreurDansTaGrosseDaronne(code);
+        // Try default error page in server.root/errors
+        if (!server.root.empty()) {
+            std::string defaultPath = smartJoinRootAndPath(server.root, std::string("errors/") + sizeToString(code) + ".html");
+            std::ifstream defaultFile(defaultPath.c_str());
+            if (defaultFile.is_open()) {
+                std::ostringstream ss;
+                ss << defaultFile.rdbuf();
+                body = ss.str();
+                defaultFile.close();
+            } else {
+                body = ErreurDansTaGrosseDaronne(code);
+            }
+        } else {
+            body = ErreurDansTaGrosseDaronne(code);
+        }
     }
     std::ostringstream response;
     response << "HTTP/1.1 " << code << " " << status << "\r\n"
