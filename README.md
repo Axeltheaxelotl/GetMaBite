@@ -23,7 +23,7 @@ SIMON<<>>
 
                 - Implémenter la méthode **HEAD** (identique à GET sans body).  
                 - Respecter `Location::return_code`/`return_url` (directive `return`) avant tout autre traitement.  
-- Traiter la directive `upload_path` (POST → enregistrer sous ce chemin).
+                - Traiter la directive `upload_path` (POST → enregistrer sous ce chemin).
 
 ## 4. Boucle epoll & écriture non bloquante  
 - Compléter `serverRun()` :  
