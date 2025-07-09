@@ -9,6 +9,7 @@
 #include <algorithm> // Ensure std::find is available
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
+#include "../routes/RedirectionHandler.hpp"
 #include "../utils/Utils.hpp"
 #include "../http/RequestBufferManager.hpp"
 #include "../config/ServerNameHandler.hpp"
@@ -324,6 +325,16 @@ void EpollClasse::handleRequest(int client_fd) {
             matchedLocation = &(*it);
             maxMatch = it->path.length();
         }
+    }
+
+    // Return directive handling: respect return_code/return_url before any other processing
+    if (matchedLocation && matchedLocation->return_code != 0)
+    {
+        std::string redirectResponse = RedirectionHandler::generateRedirectReponse(
+            matchedLocation->return_code, matchedLocation->return_url);
+        sendResponse(client_fd, redirectResponse);
+        close(client_fd);
+        return;
     }
 
     // Vérification stricte des allow_methods

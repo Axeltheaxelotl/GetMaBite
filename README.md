@@ -17,12 +17,12 @@ SIMON<<>>
 - Détection et exécution de CGI :  
   - Dans `EpollClasse::handleRequest`, tester l’extension contre `server.cgi_extensions` ou `location.cgi_extensions`.  
   - Appeler `handleCGI(...)` plutôt que stat/serve statique.
-
+SIMON<<>>
 
 
 
                 - Implémenter la méthode **HEAD** (identique à GET sans body).  
-- Respecter `Location::return_code`/`return_url` (directive `return`) avant tout autre traitement.  
+                - Respecter `Location::return_code`/`return_url` (directive `return`) avant tout autre traitement.  
 - Traiter la directive `upload_path` (POST → enregistrer sous ce chemin).
 
 ## 4. Boucle epoll & écriture non bloquante  
