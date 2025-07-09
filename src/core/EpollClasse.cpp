@@ -483,7 +483,7 @@ void EpollClasse::handleRequest(int client_fd) {
         }
         else if (reqMethod == "POST")
         {
-            handlePostRequest(client_fd, request, resolvedPath, server);
+            handlePostRequest(client_fd, request, resolvedPath, server, matchedLocation);
         }
         else if (reqMethod == "DELETE")
         {
@@ -534,8 +534,21 @@ void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std
 	sendResponse(client_fd, response);
 }
 
-void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server)
+void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location)
 {
+    // Determine target path (support upload_path)
+    std::string targetPath = filePath;
+    if (location && !location->upload_path.empty()) {
+        std::string uploadDir = location->upload_path;
+        struct stat st;
+        if (::stat(uploadDir.c_str(), &st) < 0 || !S_ISDIR(st.st_mode)) {
+            sendErrorResponse(client_fd, 403, server);
+            close(client_fd);
+            return;
+        }
+        std::string filename = filePath.substr(filePath.find_last_of('/') + 1);
+        targetPath = uploadDir + "/" + filename;
+    }
     // Trouver le début du corps de la requête
     size_t body_pos = request.find("\r\n\r\n");
     if (body_pos == std::string::npos)
@@ -546,8 +559,8 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &request, c
     }
 
     std::string body = request.substr(body_pos + 4);
-    // Créer ou écraser le fichier (POST doit créer le fichier s'il n'existe pas)
-    std::ofstream outFile(filePath.c_str());
+    // Create or overwrite the file at targetPath
+    std::ofstream outFile(targetPath.c_str());
     if (outFile)
     {
         outFile << body;

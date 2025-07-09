@@ -38,7 +38,8 @@ private:
     
     // Méthodes de gestion des requêtes HTTP
     void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead);
-    void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server);
+    // Handle POST: create or overwrite target file, or use upload_path if configured
+    void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location);
     void handleDeleteRequest(int client_fd, const std::string &filePath, const Server &server);
     void sendResponse(int client_fd, const std::string &response);
     void sendErrorResponse(int client_fd, int code, const Server& server);
