@@ -3,19 +3,19 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+        #
+#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
-#    Updated: 2025/03/14 11:24:05 by smasse           ###   ########.fr       #
+#    Updated: 2025/06/24 08:34:20 by smasse           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 NAME      = webserv
 CXX       = clang++ 
 STD       = -std=c++98
-CXXFLAGS  = -Wall -Wextra -Ofast -march=native -ffast-math -flto $(STD)
+CXXFLAGS  = -Wall -Wextra -O2 $(STD)
 INCLUDES  = -Isrc -Isrc/serverConfig -Isrc/core -Isrc/config -Isrc/utils -Isrc/routes -I./src/core
-DEBUG_FLAGS = -O0 -g3 -flto $(STD)
+DEBUG_FLAGS = -O0 -g3 $(STD)
 OBJ_DIR   = ./objs
 
 SRCS      = src/main.cpp \

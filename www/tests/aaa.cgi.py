@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import cgi
+from random import random
 import sys
 import os
 import time
@@ -12,13 +13,13 @@ def timeout_handler(signum, frame):
 
 def main():
     signal.signal(signal.SIGALRM, timeout_handler)
+    #random sleep between 0 and 10 seconds to simulate processing time
+    time.sleep(random() * 10)  # Random sleep between 0 and 10 seconds
     signal.alarm(10)  # set timeout to 10 seconds
     try:
-        # Print valid HTTP response header
-        print("HTTP/1.1 200 OK")
+        # Print proper CGI headers (not HTTP response line)
         print("Content-Type: text/html")
-        print()
-        # Send debug output to stderr so it doesn't interfere with HTTP body
+        print()  # Empty line to separate headers from body
         
         query = os.environ.get("QUERY_STRING", "")
         args = urllib.parse.parse_qs(query)
@@ -28,8 +29,12 @@ def main():
         if req_method == "POST":
             try:
                 content_length = int(os.environ.get('CONTENT_LENGTH', 0))
-                body = os.environ.get('HTTP_BODY', '')
-            except ValueError:
+                # Read POST data from stdin, not from environment variable
+                if content_length > 0:
+                    body = sys.stdin.read(content_length)
+                else:
+                    body = ""
+            except (ValueError, IOError):
                 content_length = 0
                 body = ""
         else:

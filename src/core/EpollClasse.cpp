@@ -467,7 +467,7 @@ void EpollClasse::handleRequest(int client_fd) {
 				// Convert string to map before passing to handleCGI
 				std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
 				// Pass the body to handleCGI
-				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request);
+				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request, server);
 			}
 			else
 			{
@@ -527,11 +527,23 @@ void EpollClasse::sendResponse(int client_fd, const std::string &response)
     }
 }
 
-void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request)
+void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request, const Server &server)
 {
-	CgiHandler cgiHandler(client_fd, cgiPath, method, cgi_handler, cgiParams, request);
-	std::string response = cgiHandler.executeCgi();
-	sendResponse(client_fd, response);
+	try {
+		// Use the backward compatibility constructor
+		CgiHandler cgiHandler(cgiPath, method, cgi_handler, cgiParams, request);
+		std::string response = cgiHandler.executeCgi();
+		
+		if (response.empty()) {
+			// CGI execution failed
+			sendErrorResponse(client_fd, 500, server);
+		} else {
+			sendResponse(client_fd, response);
+		}
+	} catch (const std::exception& e) {
+		Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI error: %s", e.what());
+		sendErrorResponse(client_fd, 500, server);
+	}
 }
 
 void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location)
