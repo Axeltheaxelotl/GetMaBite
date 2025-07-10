@@ -162,19 +162,29 @@ bool EpollClasse::isServerFd(int fd) {
 int EpollClasse::findMatchingServer(const std::string& host, int port) {
     int defaultIndex = -1;
     for (size_t i = 0; i < _serverConfigs.size(); ++i) {
-        const Server& srv = _serverConfigs[i];
-        // Check if server listens on requested port
-        if (std::find(srv.listen_ports.begin(), srv.listen_ports.end(), port) != srv.listen_ports.end()) {
-            if (defaultIndex == -1)
+        const Server& server = _serverConfigs[i];
+
+        // Vérifie si ce serveur écoute sur ce port
+        if (std::find(server.listen_ports.begin(), server.listen_ports.end(), port) != server.listen_ports.end()) {
+            // Si c'est le premier serveur pour ce port, le définir comme serveur par défaut
+            if (defaultIndex == -1) {
                 defaultIndex = i;
-            // Look for exact host match among server_names
-            for (size_t j = 0; j < srv.server_names.size(); ++j) {
-                if (srv.server_names[j] == host)
-                    return i;
+            }
+
+            // Cherche un match exact sur le host
+            if (std::find(server.server_names.begin(), server.server_names.end(), host) != server.server_names.end()) {
+                return i; // Retourne l'index du serveur correspondant
             }
         }
     }
-    // Return default server for port if no host match found (may be -1)
+
+    // Si aucun match sur le host, retourne le serveur par défaut pour ce port
+    if (defaultIndex != -1) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Aucun serveur correspondant au host '%s'. Utilisation du serveur par défaut pour le port %d.", host.c_str(), port);
+    } else {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Aucun serveur trouvé pour le port %d. Aucun serveur par défaut disponible.", port);
+    }
+
     return defaultIndex;
 }
 
@@ -283,33 +293,60 @@ void EpollClasse::handleRequest(int client_fd) {
             pos += 5;
             size_t end = request.find("\r\n", pos);
             hostHeader = request.substr(pos, end - pos);
-            // trim whitespace
-            while (!hostHeader.empty() && isspace(hostHeader[0])) hostHeader.erase(0, 1);
-            while (!hostHeader.empty() && isspace(hostHeader[hostHeader.size() - 1])) hostHeader.erase(hostHeader.size() - 1, 1);
+            // Trim whitespace
+            hostHeader.erase(0, hostHeader.find_first_not_of(" \t"));
+            hostHeader.erase(hostHeader.find_last_not_of(" \t") + 1);
         }
     }
-    // Determine local listening port
+    // Parse host and optional port
+    std::string hostName;
     int port = 0;
     {
+        size_t colonPos = hostHeader.find(":");
+        if (colonPos != std::string::npos) {
+            hostName = hostHeader.substr(0, colonPos);
+            std::istringstream iss(hostHeader.substr(colonPos + 1));
+            int parsedPort;
+            if (!(iss >> parsedPort)) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "Port invalide dans l'en-tête Host: %s", hostHeader.c_str());
+            } else {
+                port = parsedPort;
+            }
+        } else {
+            hostName = hostHeader;
+        }
+    }
+
+    // Déterminer le port local si aucun port n'est spécifié
+    if (port == 0) {
         struct sockaddr_in addr;
         socklen_t len = sizeof(addr);
         if (getsockname(client_fd, (struct sockaddr*)&addr, &len) == 0)
             port = ntohs(addr.sin_port);
     }
-    // Parse host and optional port
-    std::string hostName = hostHeader;
-    if (!hostHeader.empty()) {
-        size_t colon = hostHeader.find(':');
-        if (colon != std::string::npos) {
-            std::string portStr = hostHeader.substr(colon + 1);
-            hostName = hostHeader.substr(0, colon);
-            bool allDigits = true;
-            for (size_t i = 0; i < portStr.size(); ++i) {
-                if (!isdigit(static_cast<unsigned char>(portStr[i]))) { allDigits = false; break; }
+    // Utilisation de la variable existante hostName
+    {
+        size_t colonPos = hostHeader.find(":");
+        if (colonPos != std::string::npos) {
+            hostName = hostHeader.substr(0, colonPos);
+            std::istringstream iss(hostHeader.substr(colonPos + 1));
+            int parsedPort;
+            if (!(iss >> parsedPort)) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "Port invalide dans l'en-tête Host: %s", hostHeader.c_str());
+            } else {
+                port = parsedPort;
             }
-            if (allDigits)
-                port = std::atoi(portStr.c_str());
+        } else {
+            hostName = hostHeader;
         }
+    }
+
+    // Déterminer le port local si aucun port n'est spécifié
+    if (port == 0) {
+        struct sockaddr_in addr;
+        socklen_t len = sizeof(addr);
+        if (getsockname(client_fd, (struct sockaddr*)&addr, &len) == 0)
+            port = ntohs(addr.sin_port);
     }
     int idx = findMatchingServer(hostName, port);
     if (idx < 0) idx = 0;
@@ -560,7 +597,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &request, c
 
     std::string body = request.substr(body_pos + 4);
     // Create or overwrite the file at targetPath
-    std::ofstream outFile(targetPath.c_str());
+    std::ofstream outFile(targetPath.c_str(), std::ios::binary);
     if (outFile)
     {
         outFile << body;
