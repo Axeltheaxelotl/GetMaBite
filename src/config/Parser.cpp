@@ -6,7 +6,7 @@
 /*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/07/09 16:47:04 by alanty           ###   ########.fr       */
+/*   Updated: 2025/07/10 17:52:44 by alanty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -234,16 +234,21 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			if(currentServer)
 				currentServer->server_names.push_back(name);
 		}
-		else if(directive == "client_max_body_size")
-		{
-			if(currentLocation)
-			{
+		else if (directive == "client_max_body_size") {
+			if (!currentServer) {
 				std::cerr << "Error: 'client_max_body_size' directive is only allowed in server blocks." << std::endl;
-				return std::vector<Server>(); // error return
+				return std::vector<Server>();
 			}
-			iss >> size;
-			if(currentServer)
-				currentServer->client_max_body_size = size;
+			std::string param;
+			iss >> param;
+			if (!param.empty() && param[param.size() - 1] == ';') {
+				param.resize(param.size() - 1); // Remove the last character
+			}
+			if (!isAllDigits(param)) {
+				std::cerr << "Error: Invalid value for 'client_max_body_size': " << param << std::endl;
+				return std::vector<Server>();
+			}
+			currentServer->client_max_body_size = std::atoi(param.c_str());
 		}
 		else if(directive == "error_page")
 		{
@@ -351,6 +356,20 @@ std::vector<Server> parseConfig(const std::string &filepath)
 			{
 				std::cerr << "Error: 'alias' directive is only allowed inside location blocks." << std::endl;
 				return std::vector<Server>(); // error return
+			}
+		}
+		else if (directive == "limit_except") // Add support for the 'limit_except' directive in the parser
+		{
+			if (!currentLocation) {
+				std::cerr << "Error: 'limit_except' directive is only allowed in location blocks." << std::endl;
+				return std::vector<Server>();
+			}
+			std::string methods;
+			std::getline(iss, methods, ';');
+			std::istringstream methodStream(methods);
+			std::string method;
+			while (methodStream >> method) {
+				currentLocation->allow_methods.push_back(method);
 			}
 		}
 		else
