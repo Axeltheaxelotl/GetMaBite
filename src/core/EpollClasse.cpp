@@ -67,6 +67,19 @@ EpollClasse::EpollClasse() : timeoutManager(10)
 // Destructeur
 EpollClasse::~EpollClasse()
 {
+    // Clean up any remaining CGI processes
+    for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); it != _cgiProcesses.end(); ++it) {
+        CgiProcess* process = it->second;
+        CgiHandler* cgiHandler = static_cast<CgiHandler*>(process->cgiHandler);
+        if (cgiHandler) {
+            cgiHandler->terminateCgi(process);
+            delete cgiHandler;
+        }
+        delete process;
+    }
+    _cgiProcesses.clear();
+    _cgiToClient.clear();
+    
     if (_epoll_fd != -1)
     {
         close(_epoll_fd);
@@ -113,12 +126,18 @@ void EpollClasse::serverRun() {
             if (_events[i].events & EPOLLIN) {
                 if (isServerFd(fd)) {
                     acceptConnection(fd);
+                } else if (isCgiFd(fd)) {
+                    handleCgiOutput(fd);
                 } else {
                     handleRequest(fd);
                     timeoutManager.updateClientActivity(fd); // Update client activity
                 }
             } else if (_events[i].events & (EPOLLHUP | EPOLLERR)) {
-                handleError(fd);
+                if (isCgiFd(fd)) {
+                    handleCgiOutput(fd); // Handle final output and cleanup
+                } else {
+                    handleError(fd);
+                }
             }
         }
 
@@ -129,6 +148,31 @@ void EpollClasse::serverRun() {
             epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL); // Remove client from epoll
             close(*it);
             timeoutManager.removeClient(*it); // Remove client from timeout manager
+        }
+        
+        // Check for timed-out CGI processes
+        time_t currentTime = time(NULL);
+        std::vector<int> timedOutCgi;
+        for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); it != _cgiProcesses.end(); ++it) {
+            CgiProcess* process = it->second;
+            if (currentTime - process->start_time > 30) { // 30 second timeout
+                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process %d timed out. Terminating.", it->first);
+                timedOutCgi.push_back(it->first);
+            }
+        }
+        
+        for (std::vector<int>::iterator it = timedOutCgi.begin(); it != timedOutCgi.end(); ++it) {
+            std::map<int, int>::iterator clientIt = _cgiToClient.find(*it);
+            if (clientIt != _cgiToClient.end()) {
+                int client_fd = clientIt->second;
+                Server defaultServer;
+                if (!_serverConfigs.empty()) {
+                    defaultServer = _serverConfigs[0];
+                }
+                sendErrorResponse(client_fd, 504, defaultServer); // Gateway Timeout
+                close(client_fd);
+            }
+            cleanupCgiProcess(*it);
         }
     }
 }
@@ -156,6 +200,11 @@ bool EpollClasse::isServerFd(int fd) {
         }
     }
     return false;
+}
+
+// Vérifier si le FD est un CGI
+bool EpollClasse::isCgiFd(int fd) {
+    return _cgiProcesses.find(fd) != _cgiProcesses.end();
 }
 
 // Trouve un serveur correspondant à un hôte et un port donnés.
@@ -458,16 +507,43 @@ void EpollClasse::handleRequest(int client_fd) {
     struct stat file_stat;
     if (::stat(resolvedPath.c_str(), &file_stat) == 0)
     {   
-        		size_t cgiPos = resolvedPath.rfind(".cgi.");
-		if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
-		{
-			// Get the extension part after ".cgi."
-			std::string extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
-			// Find the matching location and check if the extension is supported
-			Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
-			std::map<std::string, std::string> cgi_handlers;
-			// First check the matched location (if we have one)
-			if(matchedLocation)
+        // Check for CGI execution - both .cgi.extension and direct extension patterns
+        std::string extension;
+        bool isCgi = false;
+        
+        // First check for .cgi.extension pattern
+        size_t cgiPos = resolvedPath.rfind(".cgi.");
+        if(cgiPos != std::string::npos && cgiPos + 5 < resolvedPath.length())
+        {
+            // Get the extension part after ".cgi."
+            extension = resolvedPath.substr(cgiPos + 4); // +4 to skip ".cgi"
+            isCgi = true;
+        }
+        else
+        {
+            // Check for direct extension pattern (e.g., .py, .php)
+            size_t lastDot = resolvedPath.find_last_of('.');
+            if (lastDot != std::string::npos) {
+                extension = resolvedPath.substr(lastDot);
+                // Check if this extension is configured as CGI
+                bool hasHandler = false;
+                if (matchedLocation) {
+                    hasHandler = matchedLocation->cgi_extensions.find(extension) != matchedLocation->cgi_extensions.end();
+                }
+                if (!hasHandler) {
+                    hasHandler = server.cgi_extensions.find(extension) != server.cgi_extensions.end();
+                }
+                isCgi = hasHandler;
+            }
+        }
+        
+        if (isCgi)
+        {
+            // Find the matching location and check if the extension is supported
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Extension: %s", extension.c_str());
+            std::map<std::string, std::string> cgi_handlers;
+            // First check the matched location (if we have one)
+            if(matchedLocation)
 			{
 				std::map<std::string, std::string>::const_iterator cgiIt =
 				    matchedLocation->cgi_extensions.find(extension);
@@ -505,13 +581,15 @@ void EpollClasse::handleRequest(int client_fd) {
 				std::map<std::string, std::string> cgiParamMap = parseCGIParams(cgiParam);
 				// Pass the body to handleCGI
 				handleCGI(client_fd, resolvedPath, method, cgi_handlers, cgiParamMap, request, server);
+				// Don't close client_fd here - CGI will handle it when finished
+				return;
 			}
 			else
 			{
 				// No handler found for this CGI extension
 				sendErrorResponse(client_fd, 501, server);
 			}
-		}
+        }
         // Le fichier existe, on le traite selon la méthode
         else if (reqMethod == "GET")
         {
@@ -567,233 +645,155 @@ void EpollClasse::sendResponse(int client_fd, const std::string &response)
 void EpollClasse::handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request, const Server &server)
 {
 	try {
-		// Use the backward compatibility constructor
-		CgiHandler cgiHandler(cgiPath, method, cgi_handler, cgiParams, request);
-		std::string response = cgiHandler.executeCgi();
+		// Extract server info from request for better CGI environment
+		std::string serverName = server.server_names.empty() ? "localhost" : server.server_names[0];
+		int serverPort = server.listen_ports.empty() ? 80 : server.listen_ports[0];
+		std::string remoteAddr = "127.0.0.1"; // TODO: Extract from socket
 		
-		if (response.empty()) {
-			// CGI execution failed
+		// Use the full constructor with server info
+		CgiHandler* cgiHandler = new CgiHandler(cgiPath, method, cgi_handler, cgiParams, request, serverName, serverPort, remoteAddr);
+		
+		// Start CGI process asynchronously
+		CgiProcess* process = cgiHandler->startCgi();
+		if (!process) {
+			Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to start CGI process for %s", cgiPath.c_str());
+			delete cgiHandler;
 			sendErrorResponse(client_fd, 500, server);
-		} else {
-			sendResponse(client_fd, response);
+			return;
 		}
+		
+		// Add CGI stdout to epoll for monitoring
+		epoll_event event;
+		event.events = EPOLLIN | EPOLLHUP | EPOLLERR;
+		event.data.fd = process->stdout_fd;
+		
+		if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, process->stdout_fd, &event) == -1) {
+			Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to add CGI fd to epoll: %s", strerror(errno));
+			delete process;
+			delete cgiHandler;
+			sendErrorResponse(client_fd, 500, server);
+			return;
+		}
+		
+		// Store CGI process info for async handling
+		_cgiProcesses[process->stdout_fd] = process;
+		_cgiToClient[process->stdout_fd] = client_fd;
+		
+		// Store the handler with the process for cleanup
+		process->cgiHandler = cgiHandler;
+		
+		Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process started for %s, fd=%d", cgiPath.c_str(), process->stdout_fd);
+		
 	} catch (const std::exception& e) {
 		Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI error: %s", e.what());
 		sendErrorResponse(client_fd, 500, server);
 	}
 }
 
-void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location)
-{
-    // Determine target path (support upload_path)
-    std::string targetPath = filePath;
-    if (location && !location->upload_path.empty()) {
-        std::string uploadDir = location->upload_path;
-        struct stat st;
-        if (::stat(uploadDir.c_str(), &st) < 0 || !S_ISDIR(st.st_mode)) {
-            sendErrorResponse(client_fd, 403, server);
-            close(client_fd);
-            return;
-        }
-        std::string filename = filePath.substr(filePath.find_last_of('/') + 1);
-        targetPath = uploadDir + "/" + filename;
-    }
-    // Trouver le début du corps de la requête
-    size_t body_pos = request.find("\r\n\r\n");
-    if (body_pos == std::string::npos)
-    {
-        sendErrorResponse(client_fd, 400, server);
-        close(client_fd);
+// Handle CGI output when data is ready
+void EpollClasse::handleCgiOutput(int cgi_fd) {
+    std::map<int, CgiProcess*>::iterator processIt = _cgiProcesses.find(cgi_fd);
+    if (processIt == _cgiProcesses.end()) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI process not found for fd %d", cgi_fd);
         return;
     }
-
-    std::string body = request.substr(body_pos + 4);
-    // Create or overwrite the file at targetPath
-    std::ofstream outFile(targetPath.c_str(), std::ios::binary);
-    if (outFile)
-    {
-        outFile << body;
-        outFile.close();
-        std::string response = "HTTP/1.1 201 Created\r\n"
-                             "Content-Type: text/html\r\n\r\n"
-                             "<html><body><h1>201 Created</h1></body></html>";
-        sendResponse(client_fd, response);
-    }
-    else
-    {
-        sendErrorResponse(client_fd, 403, server);
-    }
-    close(client_fd);
-}
-
-void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath, const Server &server)
-{
-    if (remove(filePath.c_str()) == 0)
-    {
-        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>200 OK</h1></body></html>";
-        sendResponse(client_fd, response);
-    }
-    else
-    {
-        sendErrorResponse(client_fd, 404, server);
-    }
-    close(client_fd);
-}
-
-// Gérer les erreurs
-void EpollClasse::handleError(int fd)
-{
-    Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD: %d", fd);
-    close(fd);
-}
-
-// Définir un FD en mode non bloquant
-void EpollClasse::setNonBlocking(int fd)
-{
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-    {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_GETFL error: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-    {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_SETFL error: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-}
-
-void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead)
-{
-    struct stat file_stat;
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
-
-    if (::stat(filePath.c_str(), &file_stat) == 0)
-    {
-        if (S_ISDIR(file_stat.st_mode))
-        {
-            std::string indexFile = server.index.empty() ? "index.html" : server.index;
-            std::string indexPath = filePath;
-            if (indexPath[indexPath.length() - 1] != '/')
-                indexPath += "/";
-            indexPath += indexFile;
-            struct stat index_stat;
-            if (::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode))
-            {
-                std::ifstream file(indexPath.c_str(), std::ios::binary);
-                if (file)
-                {
-                    std::string content((std::istreambuf_iterator<char>(file)),
-                                       std::istreambuf_iterator<char>());
-                    std::ostringstream response;
-                    response << "HTTP/1.1 200 OK\r\n"
-                              << "Content-Type: text/html\r\n"
-                              << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
-                    if (!isHead)
-                        response << content;
-                    sendResponse(client_fd, response.str());
-                }
-                else
-                {
-                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
-                    std::string response = std::string("HTTP/1.1 403 Forbidden\r\n")
-                                         + "Content-Type: text/html\r\n"
-                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                                         + errorContent;
+    
+    CgiProcess* process = processIt->second;
+    CgiHandler* cgiHandler = static_cast<CgiHandler*>(process->cgiHandler);
+    
+    // Check CGI status (this will read available data)
+    CgiStatus status = cgiHandler->checkCgiStatus(process);
+    
+    if (status == CGI_COMPLETED || status == CGI_ERROR || status == CGI_TIMEOUT) {
+        // CGI process finished, send response to client
+        std::map<int, int>::iterator clientIt = _cgiToClient.find(cgi_fd);
+        if (clientIt != _cgiToClient.end()) {
+            int client_fd = clientIt->second;
+            
+            if (status == CGI_COMPLETED) {
+                std::string response = cgiHandler->getCgiResponse(process);
+                if (!response.empty()) {
                     sendResponse(client_fd, response);
-                }
-            }
-            else
-            {
-                // Pas de fichier index, vérifier autoindex
-                bool autoindex = false;
-                for (std::vector<Location>::const_iterator it = server.locations.begin();
-                     it != server.locations.end(); ++it)
-                {
-                    if (filePath.find(it->path) == 0)
-                    {
-                        autoindex = it->autoindex;
-                        break;
+                    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI response sent to client %d", client_fd);
+                } else {
+                    Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI produced empty response");
+                    // Find the server for error response
+                    Server defaultServer;
+                    if (!_serverConfigs.empty()) {
+                        defaultServer = _serverConfigs[0];
                     }
+                    sendErrorResponse(client_fd, 500, defaultServer);
                 }
-                if (autoindex)
-                {
-                    std::string content = AutoIndex::generateAutoIndexPage(filePath);
-                    std::string response = "HTTP/1.1 200 OK\r\n"
-                                         "Content-Type: text/html\r\n"
-                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
-                    if (!isHead)
-                        response += content;
-                    sendResponse(client_fd, response);
+            } else if (status == CGI_TIMEOUT) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI timeout for fd %d", cgi_fd);
+                cgiHandler->terminateCgi(process);
+                Server defaultServer;
+                if (!_serverConfigs.empty()) {
+                    defaultServer = _serverConfigs[0];
                 }
-                else
-                {
-                    std::string errorContent = ErreurDansTaGrosseDaronne(403);
-                    std::string response = std::string("HTTP/1.1 403 Forbidden\r\n")
-                                         + "Content-Type: text/html\r\n"
-                                         + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                                         + errorContent;
-                    sendResponse(client_fd, response);
+                sendErrorResponse(client_fd, 504, defaultServer); // Gateway Timeout
+            } else {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI error for fd %d", cgi_fd);
+                Server defaultServer;
+                if (!_serverConfigs.empty()) {
+                    defaultServer = _serverConfigs[0];
                 }
+                sendErrorResponse(client_fd, 500, defaultServer);
             }
+            
+            close(client_fd);
         }
-        else if (S_ISREG(file_stat.st_mode))
-        {
-            // C'est un fichier normal, le lire et l'envoyer
-            std::ifstream file(filePath.c_str(), std::ios::binary);
-            if (file)
-            {
-                std::string content((std::istreambuf_iterator<char>(file)),
-                                   std::istreambuf_iterator<char>());
-                std::ostringstream response;
-                response << "HTTP/1.1 200 OK\r\n"
-                         << "Content-Type: text/html\r\n"
-                         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
-                if (!isHead)
-                    response << content;
-                sendResponse(client_fd, response.str());
-            }
-            else
-            {
-                std::string errorContent = ErreurDansTaGrosseDaronne(403);
-                std::string response = std::string("HTTP/1.1 403 Forbidden\r\n")
-                                     + "Content-Type: text/html\r\n"
-                                     + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                                     + errorContent;
-                sendResponse(client_fd, response);
-            }
-        }
-        else
-        {
-            // Ni fichier ni dossier
-            std::string errorContent = ErreurDansTaGrosseDaronne(404);
-            std::string response = std::string("HTTP/1.1 404 Not Found\r\n")
-                                 + "Content-Type: text/html\r\n"
-                                 + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                                 + errorContent;
-            sendResponse(client_fd, response);
-        }
+        
+        // Clean up CGI process
+        cleanupCgiProcess(cgi_fd);
     }
-    else
-    {
-        std::string errorContent = ErreurDansTaGrosseDaronne(404);
-        std::string response = std::string("HTTP/1.1 404 Not Found\r\n")
-                             + "Content-Type: text/html\r\n"
-                             + "Content-Length: " + sizeToString(errorContent.size()) + "\r\n\r\n"
-                             + errorContent;
-        sendResponse(client_fd, response);
+    // If still running, just continue - epoll will notify us when more data is available
+}
+
+// Clean up CGI process and remove from epoll
+void EpollClasse::cleanupCgiProcess(int cgi_fd) {
+    std::map<int, CgiProcess*>::iterator processIt = _cgiProcesses.find(cgi_fd);
+    if (processIt != _cgiProcesses.end()) {
+        CgiProcess* process = processIt->second;
+        CgiHandler* cgiHandler = static_cast<CgiHandler*>(process->cgiHandler);
+        
+        // Remove from epoll
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, cgi_fd, NULL);
+        
+        // Clean up process
+        delete cgiHandler;
+        delete process;
+        
+        // Remove from maps
+        _cgiProcesses.erase(processIt);
+        _cgiToClient.erase(cgi_fd);
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process cleaned up for fd %d", cgi_fd);
     }
 }
 
-// Envoie une réponse d'erreur HTTP personnalisée si possible
 void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& server) {
     std::string body;
-    std::string status = StatusCodeString(code);
+    std::string status;
     std::string contentType = "text/html";
-    std::string customPath;
+    
+    // Set status text based on code
+    switch(code) {
+        case 400: status = "Bad Request"; break;
+        case 401: status = "Unauthorized"; break;
+        case 403: status = "Forbidden"; break;
+        case 404: status = "Not Found"; break;
+        case 405: status = "Method Not Allowed"; break;
+        case 500: status = "Internal Server Error"; break;
+        case 501: status = "Not Implemented"; break;
+        case 504: status = "Gateway Timeout"; break;
+        default: status = "Error"; break;
+    }
+    
+    // Check if we have a custom error page
     std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
     if (it != server.error_pages.end()) {
-        // On tente de lire le fichier d'erreur personnalisé
+        // Try to read the custom error page
         std::ifstream file(it->second.c_str());
         if (file.is_open()) {
             std::ostringstream ss;
@@ -801,8 +801,8 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
             body = ss.str();
             file.close();
         } else {
-            // Fichier non trouvé, fallback sur la page par défaut
-            body = ErreurDansTaGrosseDaronne(code);
+            // Fallback to default error page
+            body = "<html><body><h1>" + sizeToString(code) + " " + status + "</h1></body></html>";
         }
     } else {
         // Try default error page in server.root/errors
@@ -815,40 +815,171 @@ void EpollClasse::sendErrorResponse(int client_fd, int code, const Server& serve
                 body = ss.str();
                 defaultFile.close();
             } else {
-                body = ErreurDansTaGrosseDaronne(code);
+                body = "<html><body><h1>" + sizeToString(code) + " " + status + "</h1></body></html>";
             }
         } else {
-            body = ErreurDansTaGrosseDaronne(code);
+            body = "<html><body><h1>" + sizeToString(code) + " " + status + "</h1></body></html>";
         }
     }
+    
     std::ostringstream response;
     response << "HTTP/1.1 " << code << " " << status << "\r\n"
              << "Content-Type: " << contentType << "\r\n"
              << "Content-Length: " << body.size() << "\r\n\r\n"
              << body;
+    
     sendResponse(client_fd, response.str());
 }
 
-// Utility function to parse CGI query parameters
-std::map<std::string, std::string> EpollClasse::parseCGIParams(const std::string& paramString)
-{
-	std::map<std::string, std::string> params;
-	std::istringstream stream(paramString);
-	std::string pair;
-	while(std::getline(stream, pair, '&'))
-	{
-		size_t pos = pair.find('=');
-		if(pos != std::string::npos)
-		{
-			std::string key = pair.substr(0, pos);
-			std::string value = pair.substr(pos + 1);
-			params[key] = value;
-		}
-		else if(!pair.empty())
-		{
-			// If there's no '=', use the parameter as key with empty value
-			params[pair] = "";
-		}
-	}
-	return params;
+// Missing function implementations
+void EpollClasse::handleError(int fd) {
+    Logger::logMsg(RED, CONSOLE_OUTPUT, "Error on FD: %d", fd);
+    close(fd);
+}
+
+void EpollClasse::setNonBlocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_GETFL error: %s", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "fcntl F_SETFL error: %s", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
+void EpollClasse::handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead) {
+    struct stat file_stat;
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Trying to open file: %s", filePath.c_str());
+
+    if (::stat(filePath.c_str(), &file_stat) == 0) {
+        if (S_ISDIR(file_stat.st_mode)) {
+            std::string indexFile = server.index.empty() ? "index.html" : server.index;
+            std::string indexPath = filePath;
+            if (indexPath[indexPath.length() - 1] != '/')
+                indexPath += "/";
+            indexPath += indexFile;
+            struct stat index_stat;
+            if (::stat(indexPath.c_str(), &index_stat) == 0 && S_ISREG(index_stat.st_mode)) {
+                std::ifstream file(indexPath.c_str(), std::ios::binary);
+                if (file) {
+                    std::string content((std::istreambuf_iterator<char>(file)),
+                                       std::istreambuf_iterator<char>());
+                    std::ostringstream response;
+                    response << "HTTP/1.1 200 OK\r\n"
+                              << "Content-Type: text/html\r\n"
+                              << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
+                    if (!isHead)
+                        response << content;
+                    sendResponse(client_fd, response.str());
+                } else {
+                    sendErrorResponse(client_fd, 403, server);
+                }
+            } else {
+                // Try autoindex if enabled
+                bool autoindex = false;
+                for (std::vector<Location>::const_iterator it = server.locations.begin();
+                     it != server.locations.end(); ++it) {
+                    if (filePath.find(it->path) == 0) {
+                        autoindex = it->autoindex;
+                        break;
+                    }
+                }
+                if (autoindex) {
+                    std::string content = "<html><body><h1>Directory Listing</h1></body></html>";
+                    std::string response = "HTTP/1.1 200 OK\r\n"
+                                         "Content-Type: text/html\r\n"
+                                         "Content-Length: " + sizeToString(content.size()) + "\r\n\r\n";
+                    if (!isHead)
+                        response += content;
+                    sendResponse(client_fd, response);
+                } else {
+                    sendErrorResponse(client_fd, 403, server);
+                }
+            }
+        } else if (S_ISREG(file_stat.st_mode)) {
+            std::ifstream file(filePath.c_str(), std::ios::binary);
+            if (file) {
+                std::string content((std::istreambuf_iterator<char>(file)),
+                                   std::istreambuf_iterator<char>());
+                std::ostringstream response;
+                response << "HTTP/1.1 200 OK\r\n"
+                         << "Content-Type: text/html\r\n"
+                         << "Content-Length: " << sizeToString(content.size()) << "\r\n\r\n";
+                if (!isHead)
+                    response << content;
+                sendResponse(client_fd, response.str());
+            } else {
+                sendErrorResponse(client_fd, 403, server);
+            }
+        } else {
+            sendErrorResponse(client_fd, 404, server);
+        }
+    } else {
+        sendErrorResponse(client_fd, 404, server);
+    }
+}
+
+void EpollClasse::handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location) {
+    std::string targetPath = filePath;
+    if (location && !location->upload_path.empty()) {
+        std::string uploadDir = location->upload_path;
+        struct stat st;
+        if (::stat(uploadDir.c_str(), &st) < 0 || !S_ISDIR(st.st_mode)) {
+            sendErrorResponse(client_fd, 403, server);
+            close(client_fd);
+            return;
+        }
+        std::string filename = filePath.substr(filePath.find_last_of('/') + 1);
+        targetPath = uploadDir + "/" + filename;
+    }
+    
+    size_t body_pos = request.find("\r\n\r\n");
+    if (body_pos == std::string::npos) {
+        sendErrorResponse(client_fd, 400, server);
+        close(client_fd);
+        return;
+    }
+    
+    std::string body = request.substr(body_pos + 4);
+    std::ofstream outFile(targetPath.c_str(), std::ios::binary);
+    if (outFile) {
+        outFile << body;
+        outFile.close();
+        std::string response = "HTTP/1.1 201 Created\r\n"
+                             "Content-Type: text/html\r\n\r\n"
+                             "<html><body><h1>201 Created</h1></body></html>";
+        sendResponse(client_fd, response);
+    } else {
+        sendErrorResponse(client_fd, 403, server);
+    }
+    close(client_fd);
+}
+
+void EpollClasse::handleDeleteRequest(int client_fd, const std::string &filePath, const Server &server) {
+    if (remove(filePath.c_str()) == 0) {
+        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>200 OK</h1></body></html>";
+        sendResponse(client_fd, response);
+    } else {
+        sendErrorResponse(client_fd, 404, server);
+    }
+    close(client_fd);
+}
+
+std::map<std::string, std::string> EpollClasse::parseCGIParams(const std::string& paramString) {
+    std::map<std::string, std::string> params;
+    std::istringstream stream(paramString);
+    std::string pair;
+    while(std::getline(stream, pair, '&')) {
+        size_t pos = pair.find('=');
+        if(pos != std::string::npos) {
+            std::string key = pair.substr(0, pos);
+            std::string value = pair.substr(pos + 1);
+            params[key] = value;
+        } else if(!pair.empty()) {
+            params[pair] = "";
+        }
+    }
+    return params;
 }

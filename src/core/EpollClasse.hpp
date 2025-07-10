@@ -18,6 +18,10 @@
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 4096
 
+// Forward declarations
+class CgiHandler;
+struct CgiProcess;
+
 class EpollClasse {
 private:
     int _epoll_fd;
@@ -27,11 +31,18 @@ private:
     epoll_event _events[MAX_EVENTS];
     RequestBufferManager _bufferManager;
     TimeoutManager timeoutManager;
+    
+    // CGI management
+    std::map<int, CgiProcess*> _cgiProcesses; // fd -> CgiProcess mapping
+    std::map<int, int> _cgiToClient; // cgi_fd -> client_fd mapping
 
     void setNonBlocking(int fd);
     bool isServerFd(int fd);
+    bool isCgiFd(int fd);
     void addToEpoll(int fd, epoll_event &event);
     void handleError(int fd);
+    void handleCgiOutput(int cgi_fd);
+    void cleanupCgiProcess(int cgi_fd);
     
     // Méthode pour résoudre les chemins
     std::string resolvePath(const Server &server, const std::string &requestedPath);

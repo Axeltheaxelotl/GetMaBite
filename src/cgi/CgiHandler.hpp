@@ -26,16 +26,20 @@ struct CgiProcess {
 	time_t start_time;
 	CgiStatus status;
 	std::string response;
+	bool cleaned_up;
+	void* cgiHandler; // Pointer to the CgiHandler that owns this process
 	
-	CgiProcess() : pid(-1), stdout_fd(-1), stdin_fd(-1), start_time(0), status(CGI_ERROR) {}
+	CgiProcess() : pid(-1), stdout_fd(-1), stdin_fd(-1), start_time(0), status(CGI_ERROR), cleaned_up(false), cgiHandler(NULL) {}
 	
 	// Destructor to ensure cleanup
 	~CgiProcess() {
-		if (stdout_fd != -1) {
-			close(stdout_fd);
-		}
-		if (stdin_fd != -1) {
-			close(stdin_fd);
+		if (!cleaned_up) {
+			if (stdout_fd != -1) {
+				close(stdout_fd);
+			}
+			if (stdin_fd != -1) {
+				close(stdin_fd);
+			}
 		}
 	}
 };
@@ -57,6 +61,7 @@ class CgiHandler
 		
 		static const int CGI_TIMEOUT_SECONDS = 30; // 30 seconds timeout
 		static const int MAX_CGI_PROCESSES = 10; // Limit concurrent CGI processes
+		static int activeCgiProcesses; // Track active processes
 		
 		void setupEnvironment(void);
 		void addHttpHeaders(const std::string &request);

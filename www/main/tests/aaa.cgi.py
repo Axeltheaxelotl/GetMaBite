@@ -13,8 +13,9 @@ def timeout_handler(signum, frame):
 
 def main():
     signal.signal(signal.SIGALRM, timeout_handler)
-    # Set timeout to 10 seconds
-    signal.alarm(10)
+    #random sleep between 0 and 10 seconds to simulate processing time
+    time.sleep(random() * 10)  # Random sleep between 0 and 10 seconds
+    signal.alarm(10)  # set timeout to 10 seconds
     try:
         # Print proper CGI headers (not HTTP response line)
         print("Content-Type: text/html")
