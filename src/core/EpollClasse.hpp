@@ -6,69 +6,93 @@
 #include <sstream>
 #include <sys/epoll.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include "../serverConfig/ServerConfig.hpp"
-#include "../config/Server.hpp"
-#include "../http/RequestBufferManager.hpp"
-#include "../core/TimeoutManager.hpp"
 #include <map>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <ctime>
+#include "../config/Server.hpp"
+#include "../serverConfig/ServerConfig.hpp"
+#include "TimeoutManager.hpp"
 
-#define MAX_EVENTS 1024
-#define BUFFER_SIZE 4096
+#define MAX_EVENTS 100
 
-// Forward declarations
-class CgiHandler;
+// Forward declaration - structure définie dans CgiHandler.hpp
 struct CgiProcess;
 
 class EpollClasse {
 private:
     int _epoll_fd;
     int _biggest_fd;
+    epoll_event _events[MAX_EVENTS];
     std::vector<ServerConfig> _servers;
     std::vector<Server> _serverConfigs;
-    epoll_event _events[MAX_EVENTS];
-    RequestBufferManager _bufferManager;
     TimeoutManager timeoutManager;
     
     // CGI management
-    std::map<int, CgiProcess*> _cgiProcesses; // fd -> CgiProcess mapping
-    std::map<int, int> _cgiToClient; // cgi_fd -> client_fd mapping
-
+    std::map<int, CgiProcess*> _cgiProcesses;
+    std::map<int, int> _cgiToClient;
+    
+    // Méthodes privées
     void setNonBlocking(int fd);
-    bool isServerFd(int fd);
-    bool isCgiFd(int fd);
-    void addToEpoll(int fd, epoll_event &event);
+    std::string resolvePath(const Server &server, const std::string &requestedPath);
+    std::string getMimeType(const std::string &filePath);
+    std::string generateHttpResponse(int statusCode, const std::string &contentType, 
+                                   const std::string &body, const std::map<std::string, std::string> &headers = std::map<std::string, std::string>());
+    std::string getStatusCodeString(int statusCode);
+    std::string getCurrentDateTime();
+    bool fileExists(const std::string &filePath);
+    std::string readFile(const std::string &filePath);
+    size_t getFileSize(const std::string &filePath);
+    
+    // HTTP request parsing
+    std::map<std::string, std::string> parseHeaders(const std::string &request);
+    std::string parseMethod(const std::string &request);
+    std::string parsePath(const std::string &request);
+    std::string parseQueryString(const std::string &request);
+    std::string parseBody(const std::string &request);
+    
+    // HTTP methods
+    void handleGetRequest(int client_fd, const std::string &path, const Server &server);
+    void handlePostRequest(int client_fd, const std::string &path, const std::string &body, 
+                          const std::map<std::string, std::string> &headers, const Server &server);
+    void handleDeleteRequest(int client_fd, const std::string &path, const Server &server);
+    void handleHeadRequest(int client_fd, const std::string &path, const Server &server);
+    
+    // Error handling
+    void sendErrorResponse(int client_fd, int errorCode, const Server &server);
     void handleError(int fd);
+    
+    // CGI handling
+    void handleCgiRequest(int client_fd, const std::string &scriptPath, const std::string &method,
+                         const std::string &queryString, const std::string &body,
+                         const std::map<std::string, std::string> &headers, const Server &server);
     void handleCgiOutput(int cgi_fd);
     void cleanupCgiProcess(int cgi_fd);
     
-    // Méthode pour résoudre les chemins
-    std::string resolvePath(const Server &server, const std::string &requestedPath);
-    
-    // Méthodes de gestion des requêtes HTTP
-    void handleGetRequest(int client_fd, const std::string &filePath, const Server &server, bool isHead);
-    // Handle POST: create or overwrite target file, or use upload_path if configured
-    void handlePostRequest(int client_fd, const std::string &request, const std::string &filePath, const Server &server, const Location* location);
-    void handleDeleteRequest(int client_fd, const std::string &filePath, const Server &server);
-    void sendResponse(int client_fd, const std::string &response);
-    void sendErrorResponse(int client_fd, int code, const Server& server);
-
-    // Finds the matching server based on host and port
-    int findMatchingServer(const std::string& host, int port);
-
-    void handleCGI(int client_fd, const std::string &cgiPath, const std::string &method, const std::map<std::string, std::string>& cgi_handler, const std::map<std::string, std::string>& cgiParams, const std::string &request, const Server &server);
-    std::map<std::string, std::string> parseCGIParams(const std::string& paramString);
-
+    // File upload handling
+    void handleFileUpload(int client_fd, const std::string &body, 
+                         const std::map<std::string, std::string> &headers, const Server &server);
+    std::map<std::string, std::string> parseMultipartData(const std::string &body, const std::string &boundary);
 
 public:
     EpollClasse();
     ~EpollClasse();
+    
     void setupServers(std::vector<ServerConfig> servers, const std::vector<Server> &serverConfigs);
     void serverRun();
-    void handleRequest(int client_fd);
+    void addToEpoll(int fd, epoll_event &event);
+    
+    // Event handlers
     void acceptConnection(int server_fd);
+    void handleRequest(int client_fd);
+    bool isServerFd(int fd);
+    bool isCgiFd(int fd);
+    int findMatchingServer(const std::string& host, int port);
+    
+    // Response sending
+    void sendResponse(int client_fd, const std::string& response);
 };
 
 #endif

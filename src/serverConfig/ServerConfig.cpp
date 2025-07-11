@@ -1,7 +1,6 @@
 #include "ServerConfig.hpp"
-#include <cerrno> // Ajouté pour errno
 #include <cstdlib> // Ajouté pour exit
-#include <cstring> // Ajouté pour memset et strerror
+#include <cstring> // Ajouté pour memset
 #include <sstream> // Ajouté pour std::ostringstream
 #include <stdexcept> // Pour std::runtime_error
 
@@ -42,46 +41,46 @@ void ServerConfig::setupServer()
     _server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_server_fd == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Socket creation error: %s", strerror(errno));
-        throw std::runtime_error(std::string("Socket creation error: ") + strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Socket creation failed");
+        throw std::runtime_error("Socket creation failed");
     }
 
     // Configuration des options du socket
     int opt = 1;
     if (setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Setsockopt error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Setsockopt failed");
         close(_server_fd);
-        throw std::runtime_error(std::string("Setsockopt error: ") + strerror(errno));
+        throw std::runtime_error("Setsockopt failed");
     }
 
     // Mode non-bloquant
     int flags = fcntl(_server_fd, F_GETFL, 0);
     if (flags == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl get flags failed");
         close(_server_fd);
-        throw std::runtime_error(std::string("Fcntl error: ") + strerror(errno));
+        throw std::runtime_error("Fcntl get flags failed");
     }
     if (fcntl(_server_fd, F_SETFL, flags | O_NONBLOCK) == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Fcntl set non-blocking failed");
         close(_server_fd);
-        throw std::runtime_error(std::string("Fcntl error: ") + strerror(errno));
+        throw std::runtime_error("Fcntl set non-blocking failed");
     }
 
     if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Bind error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Bind failed on %s:%d", _host.c_str(), _port);
         close(_server_fd);
-        throw std::runtime_error(std::string("Bind error: ") + strerror(errno));
+        throw std::runtime_error("Bind failed");
     }
 
     if (listen(_server_fd, SOMAXCONN) == -1)
     {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Listen error: %s", strerror(errno));
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Listen failed");
         close(_server_fd);
-        throw std::runtime_error(std::string("Listen error: ") + strerror(errno));
+        throw std::runtime_error("Listen failed");
     }
 
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Server listening on %s:%d", _host.c_str(), _port);
