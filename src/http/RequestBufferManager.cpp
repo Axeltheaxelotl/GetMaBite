@@ -51,13 +51,21 @@ bool RequestBufferManager::isRequestComplete(int client_fd) {
     size_t bodyStart = headerEnd + 4;
     size_t currentBodyLength = (buffer.length() > bodyStart) ? buffer.length() - bodyStart : 0;
     
-    // Pour les gros corps, être plus tolérant
-    if (contentLength > 1000000) { // Si plus de 1MB
-        // Vérifier qu'on a au moins reçu quelque chose et pas de timeout
-        return currentBodyLength >= contentLength;
+    // Si pas de Content-Length, considérer que la requête est complète après les headers
+    if (contentLength == 0) {
+        return true;
     }
     
-    return currentBodyLength >= contentLength;
+    // Amélioration pour les gros corps: plus robuste et précis
+    bool complete = currentBodyLength >= contentLength;
+    
+    // Debug pour les gros corps (>1MB)
+    if (contentLength > 1000000 && complete) {
+        std::cout << "[DEBUG] Large body complete: expected=" << contentLength 
+                  << ", received=" << currentBodyLength << std::endl;
+    }
+    
+    return complete;
 }
 
 size_t RequestBufferManager::getBufferSize(int client_fd) {
