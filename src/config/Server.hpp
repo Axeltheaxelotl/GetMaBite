@@ -17,6 +17,7 @@ public:
     std::vector<Location> locations;            // Locations configurées
     std::map<std::string, std::string> cgi_extensions; // Extensions CGI globales
     bool autoindex;                             // Autoindex global
+    std::string upload_path;                    // Chemin d'upload par défaut
     
     Server();
     ~Server();

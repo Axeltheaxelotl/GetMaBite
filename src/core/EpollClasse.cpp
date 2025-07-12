@@ -59,7 +59,7 @@ static std::string smartJoinRootAndPath(const std::string& root, const std::stri
 }
 
 // Constructeur
-EpollClasse::EpollClasse() : timeoutManager(10)
+EpollClasse::EpollClasse() : timeoutManager(60) // Augmenté à 60 secondes pour les très gros corps
 {
     _epoll_fd = epoll_create1(0);
     if (_epoll_fd == -1)
@@ -142,18 +142,24 @@ void EpollClasse::serverRun() {
                 if (isCgiFd(fd)) {
                     handleCgiOutput(fd); // Handle final output and cleanup
                 } else {
-                    handleError(fd);
+                    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client %d disconnected or error", fd);
+                    epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+                    timeoutManager.removeClient(fd);
+                    close(fd);
                 }
             }
         }
 
-        // Check for timed-out clients
-        std::vector<int> timedOutClients = timeoutManager.getTimedOutClients();
-        for (std::vector<int>::iterator it = timedOutClients.begin(); it != timedOutClients.end(); ++it) {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client %d timed out. Closing connection.", *it);
-            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL); // Remove client from epoll
-            close(*it);
-            timeoutManager.removeClient(*it); // Remove client from timeout manager
+        // Optimisation: Check for timed-out clients moins fréquemment pour améliorer les performances
+        static int timeout_check_counter = 0;
+        if (++timeout_check_counter >= 20) { // Vérifier les timeouts tous les 20 cycles au lieu de chaque cycle
+            timeout_check_counter = 0;
+            std::vector<int> timedOutClients = timeoutManager.getTimedOutClients();
+            for (std::vector<int>::iterator it = timedOutClients.begin(); it != timedOutClients.end(); ++it) {
+                epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, *it, NULL);
+                close(*it);
+                timeoutManager.removeClient(*it);
+            }
         }
         
         // Check for timed-out CGI processes
@@ -248,22 +254,31 @@ void EpollClasse::acceptConnection(int server_fd)
 {
     struct sockaddr_in client_address;
     socklen_t addrlen = sizeof(client_address);
-    int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
-    if (client_fd == -1)
-    {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept failed");
-        return;
+    
+    // Accepter plusieurs connexions d'un coup pour améliorer les performances
+    while (true) {
+        int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &addrlen);
+        if (client_fd == -1)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Plus de connexions à accepter pour le moment
+                break;
+            }
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Accept failed: %s", strerror(errno));
+            return;
+        }
+
+        setNonBlocking(client_fd);
+        timeoutManager.addClient(client_fd);
+
+        epoll_event event;
+        event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
+        event.data.fd = client_fd;
+
+        addToEpoll(client_fd, event);
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d (fd=%d)",
+                       inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), client_fd);
     }
-
-    setNonBlocking(client_fd);
-
-    epoll_event event;
-    event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
-    event.data.fd = client_fd;
-
-    addToEpoll(client_fd, event);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Accepted connection from %s:%d",
-                   inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 }
 
 // Résoudre le chemin demandé
@@ -292,7 +307,14 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
             }
             // Sinon utiliser le root de la location ou du serveur
             std::string root = !it->root.empty() ? it->root : server.root;
-            return smartJoinRootAndPath(root, requestedPath.substr(1));
+            // Pour les chemins se terminant par "/", on enlève le "/" avant de faire substr(1)
+            std::string pathToAdd = requestedPath;
+            if (pathToAdd.length() > it->path.length()) {
+                pathToAdd = requestedPath.substr(it->path.length());
+            } else {
+                pathToAdd = "";
+            }
+            return smartJoinRootAndPath(root, pathToAdd);
         }
     }
 
@@ -300,7 +322,7 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
     return smartJoinRootAndPath(server.root, requestedPath);
 }
 
-// Gérer une requête client
+    // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd) {
     char buffer[BUFFER_SIZE];
     int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
@@ -309,8 +331,9 @@ void EpollClasse::handleRequest(int client_fd) {
         if (bytes_read == 0) {
             Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
         } else {
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d", client_fd);
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
         }
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         close(client_fd);
         timeoutManager.removeClient(client_fd);
         return;
@@ -318,6 +341,10 @@ void EpollClasse::handleRequest(int client_fd) {
 
     buffer[bytes_read] = '\0';
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+    
+    // Mettre à jour l'activité du client pour éviter les timeouts sur les gros corps
+    timeoutManager.updateClientActivity(client_fd);
+    
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Buffer for fd %d: %zu bytes", client_fd, _bufferManager.get(client_fd).size());
 
     if (!_bufferManager.isRequestComplete(client_fd)) {
@@ -326,13 +353,102 @@ void EpollClasse::handleRequest(int client_fd) {
     }
 
     std::string request = _bufferManager.get(client_fd);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d:\n%s", client_fd, request.c_str());
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d", client_fd);
     _bufferManager.clear(client_fd);
 
-    // Parser la requête HTTP
+    // Parser la requête HTTP avec validation renforcée
     std::string method, path, protocol;
     std::istringstream requestStream(request);
-    requestStream >> method >> path >> protocol;
+    
+    // Validation de base - vérifier que la première ligne est complète
+    std::string firstLine;
+    if (!std::getline(requestStream, firstLine) || firstLine.empty()) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Empty or invalid request line");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Supprimer les caractères de fin de ligne
+    if (!firstLine.empty() && firstLine[firstLine.length()-1] == '\r') {
+        firstLine = firstLine.substr(0, firstLine.length()-1);
+    }
+    
+    // Parser la première ligne
+    std::istringstream lineStream(firstLine);
+    lineStream >> method >> path >> protocol;
+
+    // Validation des requêtes malformées - cas plus stricts
+    if (method.empty() || path.empty()) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: empty method or path");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Validation de la longueur des éléments et caractères invalides
+    if (method.length() > 10 || path.length() > 2048 || method.find('\0') != std::string::npos || path.find('\0') != std::string::npos) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: method or path too long or contains null bytes");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Vérifier que le chemin commence par "/"
+    if (path.empty() || path[0] != '/') {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: path must start with /");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Vérifier que le protocole est HTTP/1.1 ou HTTP/1.0
+    if (!protocol.empty() && protocol != "HTTP/1.1" && protocol != "HTTP/1.0") {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Unsupported protocol: %s", protocol.c_str());
+        sendErrorResponse(client_fd, 505, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // HTTP Version Not Supported
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Si aucun protocole n'est spécifié, c'est malformé en HTTP strict
+    if (protocol.empty()) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: missing HTTP protocol");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Vérifier que la méthode est valide
+    if (method != "GET" && method != "POST" && method != "DELETE" && method != "HEAD") {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Invalid HTTP method: %s", method.c_str());
+        sendErrorResponse(client_fd, 405, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // Method Not Allowed
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
+
+    // Gestion du chunked encoding - retourner 400 au lieu de fermer brutalement
+    if (request.find("Transfer-Encoding: chunked") != std::string::npos) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Chunked encoding received - returning 400");
+        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        close(client_fd);
+        return;
+    }
 
     if (path.empty())
         path = "/";
@@ -429,26 +545,37 @@ void EpollClasse::handleRequest(int client_fd) {
         return;
     }
 
-    // Vérification stricte des allow_methods
+    // Vérification des allow_methods
     if (matchedLocation)
     {
         bool allowed = false;
-        for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-        {
-            if (matchedLocation->allow_methods[i] == reqMethod)
+        
+        // Si aucune méthode n'est définie, autoriser GET, POST, DELETE par défaut
+        if (matchedLocation->allow_methods.empty()) {
+            allowed = (reqMethod == "GET" || reqMethod == "POST" || reqMethod == "DELETE");
+        } else {
+            for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
             {
-                allowed = true;
-                break;
+                if (matchedLocation->allow_methods[i] == reqMethod)
+                {
+                    allowed = true;
+                    break;
+                }
             }
         }
+        
         if (!allowed)
         {
             // Générer la liste des méthodes autorisées
             std::string allowHeader = "Allow: ";
-            for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-            {
-                if (i > 0) allowHeader += ", ";
-                allowHeader += matchedLocation->allow_methods[i];
+            if (matchedLocation->allow_methods.empty()) {
+                allowHeader += "GET, POST, DELETE";
+            } else {
+                for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
+                {
+                    if (i > 0) allowHeader += ", ";
+                    allowHeader += matchedLocation->allow_methods[i];
+                }
             }
             std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
             std::ostringstream response;
@@ -465,24 +592,11 @@ void EpollClasse::handleRequest(int client_fd) {
     }
     else
     {
-        bool allowed = false;
-        if (!server.locations.empty()) {
-            for (size_t i = 0; i < server.locations.size(); ++i) {
-                if (server.locations[i].path == "/") {
-                    for (size_t j = 0; j < server.locations[i].allow_methods.size(); ++j) {
-                        if (server.locations[i].allow_methods[j] == reqMethod) {
-                            allowed = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        // Si pas de location /, GET seulement autorisé par défaut
-        if (!allowed && reqMethod == "GET")
-            allowed = true;
+        // Si aucune location ne correspond, autoriser GET, POST, DELETE par défaut
+        bool allowed = (reqMethod == "GET" || reqMethod == "POST" || reqMethod == "DELETE");
+        
         if (!allowed) {
-            std::string allowHeader = "Allow: GET";
+            std::string allowHeader = "Allow: GET, POST, DELETE";
             std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
             std::ostringstream response;
             response << "HTTP/1.1 405 Method Not Allowed\r\n"
@@ -743,23 +857,26 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         }
     }
     
+    // Vérifier d'abord si c'est un répertoire pour l'autoindex
+    struct stat pathStat;
+    if (stat(resolvedPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
+        const Location* location = server.findLocation(path);
+        bool autoindexEnabled = location ? location->autoindex : server.autoindex;
+        
+        if (autoindexEnabled) {
+            AutoIndex autoIndex;
+            std::string autoIndexPage = autoIndex.generateAutoIndexPage(resolvedPath);
+            std::string response = generateHttpResponse(200, "text/html", autoIndexPage);
+            send(client_fd, response.c_str(), response.length(), 0);
+            return;
+        } else {
+            sendErrorResponse(client_fd, 403, server);
+            return;
+        }
+    }
+    
     // Vérifier si le fichier existe
     if (!fileExists(resolvedPath)) {
-        // Si c'est un répertoire, vérifier l'autoindex
-        struct stat pathStat;
-        if (stat(resolvedPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-            const Location* location = server.findLocation(path);
-            bool autoindexEnabled = location ? location->autoindex : server.autoindex;
-            
-            if (autoindexEnabled) {
-                AutoIndex autoIndex;
-                std::string autoIndexPage = autoIndex.generateAutoIndexPage(resolvedPath);
-                std::string response = generateHttpResponse(200, "text/html", autoIndexPage);
-                send(client_fd, response.c_str(), response.length(), 0);
-                return;
-            }
-        }
-        
         sendErrorResponse(client_fd, 404, server);
         return;
     }
@@ -814,6 +931,19 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
     // POST simple - écrire dans un fichier
     if (location && !location->upload_path.empty()) {
         std::string uploadPath = location->upload_path + "/post_result.txt";
+        std::ofstream file(uploadPath.c_str());
+        if (file.is_open()) {
+            file << body;
+            file.close();
+            
+            std::string response = generateHttpResponse(201, "text/plain", "File uploaded successfully");
+            send(client_fd, response.c_str(), response.length(), 0);
+        } else {
+            sendErrorResponse(client_fd, 500, server);
+        }
+    } else if (!server.upload_path.empty()) {
+        // Fallback sur l'upload_path du serveur
+        std::string uploadPath = server.upload_path + "/post_result.txt";
         std::ofstream file(uploadPath.c_str());
         if (file.is_open()) {
             file << body;
@@ -935,10 +1065,22 @@ void EpollClasse::handleFileUpload(int client_fd, const std::string &body,
     std::map<std::string, std::string> formData = parseMultipartData(body, boundary);
     
     // Trouver la location correspondante pour l'upload
-    const Location* location = server.findLocation("/upload");
+    const Location* location = server.findLocation("/");
     if (!location || location->upload_path.empty()) {
-        sendErrorResponse(client_fd, 403, server);
-        return;
+        // Fallback: chercher n'importe quelle location avec upload_path
+        location = NULL;
+        for (std::vector<Location>::const_iterator it = server.locations.begin(); 
+             it != server.locations.end(); ++it) {
+            if (!it->upload_path.empty()) {
+                location = &(*it);
+                break;
+            }
+        }
+        // Si aucune location n'a d'upload_path, utiliser celui du serveur
+        if (!location && server.upload_path.empty()) {
+            sendErrorResponse(client_fd, 403, server);
+            return;
+        }
     }
     
     bool uploadSuccess = false;
@@ -958,7 +1100,11 @@ void EpollClasse::handleFileUpload(int client_fd, const std::string &body,
                         continue;
                     }
                     
-                    std::string uploadPath = location->upload_path + "/" + filename;
+                    // Utiliser upload_path de la location ou du serveur
+                    std::string uploadDir = (location && !location->upload_path.empty()) 
+                                           ? location->upload_path 
+                                           : server.upload_path;
+                    std::string uploadPath = uploadDir + "/" + filename;
                     std::ofstream file(uploadPath.c_str(), std::ios::binary);
                     if (file.is_open()) {
                         file << it->second;

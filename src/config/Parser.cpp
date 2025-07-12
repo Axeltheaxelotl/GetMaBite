@@ -6,7 +6,7 @@
 /*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/07/11 15:48:41 by alanty           ###   ########.fr       */
+/*   Updated: 2025/07/12 15:31:19 by alanty           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,10 +60,32 @@ void Parser::tokenize(const std::string& content) {
     _tokens.clear();
     _currentToken = 0;
     
-    std::istringstream iss(content);
     std::string token;
+    for (size_t i = 0; i < content.length(); ++i) {
+        char c = content[i];
+        
+        if (std::isspace(c)) {
+            if (!token.empty()) {
+                _tokens.push_back(token);
+                token.clear();
+            }
+        } else if (c == '{' || c == '}' || c == ';') {
+            if (!token.empty()) {
+                _tokens.push_back(token);
+                token.clear();
+            }
+            _tokens.push_back(std::string(1, c));
+        } else if (c == '#') {
+            // Ignorer les commentaires jusqu'à la fin de la ligne
+            while (i < content.length() && content[i] != '\n') {
+                ++i;
+            }
+        } else {
+            token += c;
+        }
+    }
     
-    while (iss >> token) {
+    if (!token.empty()) {
         _tokens.push_back(token);
     }
 }
@@ -113,6 +135,11 @@ void Parser::parseLocation(Server& server) {
 
 void Parser::parseDirective(Server& server, Location* location) {
     std::string directive = getNextToken();
+    
+    // Ignorer les points-virgules orphelins
+    if (directive == ";") {
+        return;
+    }
     
     if (directive == "listen") {
         int port = stringToInt(getNextToken());
@@ -199,10 +226,12 @@ void Parser::parseDirective(Server& server, Location* location) {
         location->alias = getNextToken();
         
     } else if (directive == "upload_path") {
-        if (!location) {
-            throw std::runtime_error("'upload_path' directive only allowed in location context");
+        std::string uploadPath = getNextToken();
+        if (location) {
+            location->upload_path = uploadPath;
+        } else {
+            server.upload_path = uploadPath;
         }
-        location->upload_path = getNextToken();
         
     } else if (directive == "cgi_extension") {
         std::string extension = getNextToken();
@@ -214,7 +243,17 @@ void Parser::parseDirective(Server& server, Location* location) {
         }
         
     } else {
-        throw std::runtime_error("Unknown directive: " + directive);
+        // Ignorer les directives inconnues au lieu de crasher
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Warning: Unknown directive '%s' ignored", directive.c_str());
+        // Consommer le token suivant pour éviter les erreurs de parsing
+        if (hasMoreTokens() && peekNextToken() != "}" && peekNextToken() != ";") {
+            getNextToken();
+        }
+    }
+    
+    // Consommer automatiquement le point-virgule suivant s'il existe
+    if (hasMoreTokens() && peekNextToken() == ";") {
+        getNextToken(); // Consommer le ";"
     }
 }
 

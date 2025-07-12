@@ -1,0 +1,109 @@
+{
+  "total_tests": 17,
+  "passed": 13,
+  "failed": 4,
+  "tests": [
+    {
+      "name": "Basic GET",
+      "passed": true,
+      "details": "",
+      "timestamp": "2025-07-12T16:57:01.882940"
+    },
+    {
+      "name": "Static File",
+      "passed": true,
+      "details": "Status: 200",
+      "timestamp": "2025-07-12T16:57:01.883119"
+    },
+    {
+      "name": "404 Error",
+      "passed": true,
+      "details": "Status: 404",
+      "timestamp": "2025-07-12T16:57:01.883272"
+    },
+    {
+      "name": "POST Method",
+      "passed": true,
+      "details": "Status: 201",
+      "timestamp": "2025-07-12T16:57:01.883559"
+    },
+    {
+      "name": "DELETE Method",
+      "passed": true,
+      "details": "Status: 404",
+      "timestamp": "2025-07-12T16:57:01.883717"
+    },
+    {
+      "name": "CGI Execution",
+      "passed": false,
+      "details": "Status: None",
+      "timestamp": "2025-07-12T16:57:01.914447"
+    },
+    {
+      "name": "CGI POST",
+      "passed": false,
+      "details": "Status: None",
+      "timestamp": "2025-07-12T16:57:11.922345"
+    },
+    {
+      "name": "Autoindex",
+      "passed": true,
+      "details": "Status: 200",
+      "timestamp": "2025-07-12T16:57:11.922797"
+    },
+    {
+      "name": "Multiple Headers",
+      "passed": true,
+      "details": "Status: 200",
+      "timestamp": "2025-07-12T16:57:11.923116"
+    },
+    {
+      "name": "File Upload",
+      "passed": true,
+      "details": "Status: 201",
+      "timestamp": "2025-07-12T16:57:11.923463"
+    },
+    {
+      "name": "Large Body",
+      "passed": false,
+      "details": "Status: None",
+      "timestamp": "2025-07-12T16:57:32.200711"
+    },
+    {
+      "name": "Chunked Request",
+      "passed": true,
+      "details": "Status: 400",
+      "timestamp": "2025-07-12T16:57:32.201132"
+    },
+    {
+      "name": "Malformed Requests",
+      "passed": true,
+      "details": "3/5 handled correctly",
+      "timestamp": "2025-07-12T16:57:32.201786"
+    },
+    {
+      "name": "Timeout Handling",
+      "passed": true,
+      "details": "",
+      "timestamp": "2025-07-12T16:58:39.283096"
+    },
+    {
+      "name": "Concurrent Connections (10)",
+      "passed": true,
+      "details": "Success rate: 1.00",
+      "timestamp": "2025-07-12T16:58:39.285421"
+    },
+    {
+      "name": "Concurrent Connections (50)",
+      "passed": true,
+      "details": "Success rate: 1.00",
+      "timestamp": "2025-07-12T16:58:39.290686"
+    },
+    {
+      "name": "Stress Test",
+      "passed": false,
+      "details": "RPS: 6.73, Error rate: 19.80%",
+      "timestamp": "2025-07-12T16:59:00.418989"
+    }
+  ]
+}

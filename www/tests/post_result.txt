@@ -1,1 +1,1 @@
-Ceci est un test POST
+test=data&name=value
