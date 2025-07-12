@@ -7,103 +7,103 @@
       "name": "Basic GET",
       "passed": true,
       "details": "",
-      "timestamp": "2025-07-12T19:11:59.460538"
+      "timestamp": "2025-07-12T19:21:38.227068"
     },
     {
       "name": "Static File",
       "passed": true,
       "details": "Status: 200",
-      "timestamp": "2025-07-12T19:11:59.460870"
+      "timestamp": "2025-07-12T19:21:38.227348"
     },
     {
       "name": "404 Error",
       "passed": true,
       "details": "Status: 404",
-      "timestamp": "2025-07-12T19:11:59.461141"
+      "timestamp": "2025-07-12T19:21:38.227615"
     },
     {
       "name": "POST Method",
       "passed": true,
       "details": "Status: 201",
-      "timestamp": "2025-07-12T19:11:59.461432"
+      "timestamp": "2025-07-12T19:21:38.228034"
     },
     {
       "name": "DELETE Method",
       "passed": true,
       "details": "Status: 404",
-      "timestamp": "2025-07-12T19:11:59.461611"
+      "timestamp": "2025-07-12T19:21:38.228269"
     },
     {
       "name": "CGI Execution",
       "passed": false,
       "details": "Status: None",
-      "timestamp": "2025-07-12T19:11:59.490666"
+      "timestamp": "2025-07-12T19:21:38.257869"
     },
     {
       "name": "CGI POST",
       "passed": false,
       "details": "Status: None",
-      "timestamp": "2025-07-12T19:12:09.501255"
+      "timestamp": "2025-07-12T19:21:48.268277"
     },
     {
       "name": "Autoindex",
       "passed": true,
       "details": "Status: 200",
-      "timestamp": "2025-07-12T19:12:09.501554"
+      "timestamp": "2025-07-12T19:21:48.268586"
     },
     {
       "name": "Multiple Headers",
       "passed": true,
       "details": "Status: 200",
-      "timestamp": "2025-07-12T19:12:09.501777"
+      "timestamp": "2025-07-12T19:21:48.268916"
     },
     {
       "name": "File Upload",
       "passed": true,
       "details": "Status: 201",
-      "timestamp": "2025-07-12T19:12:09.502109"
+      "timestamp": "2025-07-12T19:21:48.269319"
     },
     {
       "name": "Large Body",
       "passed": false,
       "details": "Status: None",
-      "timestamp": "2025-07-12T19:12:36.407198"
+      "timestamp": "2025-07-12T19:22:15.133265"
     },
     {
       "name": "Chunked Request",
       "passed": true,
       "details": "Status: 201",
-      "timestamp": "2025-07-12T19:12:36.408071"
+      "timestamp": "2025-07-12T19:22:15.133799"
     },
     {
       "name": "Malformed Requests",
       "passed": true,
       "details": "3/5 handled correctly",
-      "timestamp": "2025-07-12T19:12:36.408981"
+      "timestamp": "2025-07-12T19:22:15.134379"
     },
     {
       "name": "Timeout Handling",
       "passed": true,
       "details": "",
-      "timestamp": "2025-07-12T19:13:36.048861"
+      "timestamp": "2025-07-12T19:23:24.649702"
     },
     {
       "name": "Concurrent Connections (10)",
       "passed": true,
       "details": "Success rate: 1.00",
-      "timestamp": "2025-07-12T19:13:36.050900"
+      "timestamp": "2025-07-12T19:23:24.651719"
     },
     {
       "name": "Concurrent Connections (50)",
       "passed": true,
       "details": "Success rate: 1.00",
-      "timestamp": "2025-07-12T19:13:36.055964"
+      "timestamp": "2025-07-12T19:23:24.656856"
     },
     {
       "name": "Stress Test",
       "passed": true,
-      "details": "RPS: 14.60, Error rate: 9.13%",
-      "timestamp": "2025-07-12T19:13:58.293357"
+      "details": "RPS: 14.53, Error rate: 9.17%",
+      "timestamp": "2025-07-12T19:23:46.893612"
     }
   ]
 }

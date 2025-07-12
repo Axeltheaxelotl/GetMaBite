@@ -929,18 +929,20 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         }
     }
     
-    // Vérifier si le fichier existe
+    // Vérifier si le fichier existe avec logs de debug
     if (!fileExists(resolvedPath)) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found: %s", resolvedPath.c_str());
         sendErrorResponse(client_fd, 404, server);
         return;
     }
     
-    // Lire et envoyer le fichier
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File exists, attempting to read: %s", resolvedPath.c_str());
+    
+    // Lire et envoyer le fichier (même s'il est vide)
     std::string content = readFile(resolvedPath);
-    if (content.empty()) {
-        sendErrorResponse(client_fd, 500, server);
-        return;
-    }
+    
+    // Un fichier vide est valide, ne pas retourner d'erreur 500
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File read successfully: %s (%zu bytes)", resolvedPath.c_str(), content.length());
     
     std::string mimeType = getMimeType(resolvedPath);
     std::string response = generateHttpResponse(200, mimeType, content);
@@ -952,9 +954,16 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
                                   const std::map<std::string, std::string> &headers, const Server &server) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "POST request for path: %s (body size: %zu bytes)", path.c_str(), body.length());
     
-    // Vérifier la taille du corps de la requête
+    // Vérifier la taille du corps de la requête avec une logique plus robuste
     const Location* location = server.findLocation(path);
     size_t maxBodySize = location ? location->client_max_body_size : server.client_max_body_size;
+    
+    // Si maxBodySize est 0, utiliser une valeur par défaut
+    if (maxBodySize == 0) {
+        maxBodySize = server.client_max_body_size > 0 ? server.client_max_body_size : 1048576; // 1MB par défaut
+    }
+    
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Body size check: %zu bytes (max allowed: %zu bytes)", body.length(), maxBodySize);
     
     if (body.length() > maxBodySize) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Request body too large: %zu bytes (max: %zu)", body.length(), maxBodySize);
@@ -983,12 +992,12 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
         return;
     }
     
-    // POST simple - écrire dans un fichier
+    // POST simple - écrire dans un fichier avec gestion robuste des gros corps
     if (location && !location->upload_path.empty()) {
         std::string uploadPath = location->upload_path + "/post_result.txt";
-        std::ofstream file(uploadPath.c_str(), std::ios::binary); // Mode binaire pour les gros fichiers
+        std::ofstream file(uploadPath.c_str(), std::ios::binary);
         if (file.is_open()) {
-            file << body;
+            file.write(body.c_str(), body.length());
             file.close();
             
             Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Large POST body written to %s (%zu bytes)", uploadPath.c_str(), body.length());
@@ -1001,9 +1010,9 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
     } else if (!server.upload_path.empty()) {
         // Fallback sur l'upload_path du serveur
         std::string uploadPath = server.upload_path + "/post_result.txt";
-        std::ofstream file(uploadPath.c_str(), std::ios::binary); // Mode binaire pour les gros fichiers
+        std::ofstream file(uploadPath.c_str(), std::ios::binary);
         if (file.is_open()) {
-            file << body;
+            file.write(body.c_str(), body.length());
             file.close();
             
             Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Large POST body written to %s (%zu bytes)", uploadPath.c_str(), body.length());
