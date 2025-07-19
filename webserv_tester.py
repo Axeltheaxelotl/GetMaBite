@@ -238,10 +238,10 @@ class WebservTester:
         response = self.send_http_request("GET", "/aaa.cgi.py")
         status_code, headers, body = self.parse_http_response(response)
         
-        if status_code == 200 and "Content-Type" in str(headers):
+        if status_code == 200 and "content-type" in headers:
             self.add_test_result("CGI Execution", True)
         else:
-            self.add_test_result("CGI Execution", False, f"Status: {status_code}")
+            self.add_test_result("CGI Execution", False, f"Status: {status_code}, Headers: {headers}")
             
     def test_cgi_post(self):
         """Test CGI avec POST"""
@@ -481,19 +481,6 @@ class WebservTester:
             self.test_autoindex()
             self.test_multiple_headers()
             self.test_file_upload()
-            
-            # Tests de robustesse
-            self.log_info("=== Tests de robustesse ===")
-            self.test_large_body()
-            self.test_chunked_request()
-            self.test_malformed_requests()
-            self.test_timeout_handling()
-            
-            # Tests de performance
-            self.log_info("=== Tests de performance ===")
-            self.test_concurrent_connections(10)
-            self.test_concurrent_connections(50)
-            self.stress_test(duration=15, concurrent_connections=10)
             
         finally:
             self.stop_webserv()

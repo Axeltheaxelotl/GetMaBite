@@ -54,9 +54,9 @@ private:
     std::string parseBody(const std::string &request);
     
     // HTTP methods
-    void handleGetRequest(int client_fd, const std::string &path, const Server &server);
+    void handleGetRequest(int client_fd, const std::string &path, const Server &server, const std::string &queryString = "");
     void handlePostRequest(int client_fd, const std::string &path, const std::string &body, 
-                          const std::map<std::string, std::string> &headers, const Server &server);
+                          const std::map<std::string, std::string> &headers, const Server &server, const std::string &queryString = "");
     void handleDeleteRequest(int client_fd, const std::string &path, const Server &server);
     void handleHeadRequest(int client_fd, const std::string &path, const Server &server);
     

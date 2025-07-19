@@ -68,6 +68,10 @@ EpollClasse::EpollClasse() : timeoutManager(60) // Augmenté à 60 secondes pour
         throw std::runtime_error("Epoll creation failed");
     }
     _biggest_fd = 0;
+    
+    // Set up signal handling for child processes to avoid zombies
+    signal(SIGCHLD, SIG_IGN); // Automatically reap child processes
+    signal(SIGPIPE, SIG_IGN); // Ignore broken pipe signals
 }
 
 // Destructeur
@@ -110,7 +114,7 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vec
         Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", _serverConfigs[0].index.c_str());
 
         epoll_event event;
-        event.events = EPOLLIN | EPOLLET; // Lecture et mode edge-triggered
+        event.events = EPOLLIN; // Use level-triggered mode for more reliable operation
         event.data.fd = it->getFd();
 
         addToEpoll(it->getFd(), event);
@@ -148,9 +152,11 @@ void EpollClasse::serverRun() {
                 if (isCgiFd(fd)) {
                     handleCgiOutput(fd);
                 } else {
-                    // Fermeture ultra-rapide sans logs pour maximiser les performances
+                    // Client disconnected or error
+                    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client %d disconnected (HUP/ERR)", fd);
                     epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
                     timeoutManager.removeClient(fd);
+                    _bufferManager.clear(fd);
                     close(fd);
                 }
             }
@@ -300,7 +306,7 @@ void EpollClasse::acceptConnection(int server_fd)
         timeoutManager.addClient(client_fd);
 
         epoll_event event;
-        event.events = EPOLLIN | EPOLLET; // Edge-triggered pour meilleures performances
+        event.events = EPOLLIN; // Use level-triggered for clients too
         event.data.fd = client_fd;
 
         if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
@@ -365,45 +371,54 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
 }    // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd) {
     char buffer[BUFFER_SIZE];
-    int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
+    ssize_t bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
 
-    if (bytes_read <= 0) {
-        if (bytes_read == 0) {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
+    if (bytes_read < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No data available for now - this shouldn't happen with level-triggered
+            return;
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
+            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+            timeoutManager.removeClient(client_fd);
+            _bufferManager.clear(client_fd);
+            close(client_fd);
+            return;
         }
+    } else if (bytes_read == 0) {
+        // Client closed connection
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Client FD %d closed the connection", client_fd);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-        close(client_fd);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
+        close(client_fd);
         return;
     }
 
-    buffer[bytes_read] = '\0';
+    // We have data
     _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+    timeoutManager.updateClientActivity(client_fd);
+    
+    // Check buffer size limit to prevent memory attacks
+    size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
+    if (currentBufferSize > 10485760) { // 10MB limit
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Buffer too large for fd %d, closing connection", client_fd);
+        sendErrorResponse(client_fd, 413, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
+        close(client_fd);
+        return;
+    }
     
     // Mettre à jour l'activité du client pour éviter les timeouts sur les gros corps
     timeoutManager.updateClientActivity(client_fd);
     
-    // Pour les gros corps, être plus verbeux et vérifier la mémoire
-    size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
-    if (currentBufferSize > 1000000) { // Plus de 1MB
-        Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Large buffer for fd %d: %zu bytes", client_fd, currentBufferSize);
-        
-        // Vérifier si on dépasse la limite de sécurité (10MB pour éviter les attaques)
-        if (currentBufferSize > 10485760) { // 10MB
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Buffer too large for fd %d, closing connection", client_fd);
-            sendErrorResponse(client_fd, 413, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
-            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-            timeoutManager.removeClient(client_fd);
-            close(client_fd);
-            return;
-        }
-    }
-
+    // Check if we have a complete HTTP request
     if (!_bufferManager.isRequestComplete(client_fd)) {
-        // Pour les gros corps, éviter trop de logs verbeux
-        if (currentBufferSize < 1000000) {
+        // Request not complete, wait for more data
+        size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
+        if (currentBufferSize < 1000000) { // Only log for smaller buffers to avoid spam
             Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data (%zu bytes so far)", client_fd, currentBufferSize);
         }
         return;
@@ -414,7 +429,7 @@ void EpollClasse::handleRequest(int client_fd) {
     _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP avec validation renforcée
-    std::string method, path, protocol;
+    std::string method, path, protocol, fullPath;
     std::istringstream requestStream(request);
     
     // Validation de base - vérifier que la première ligne est complète
@@ -424,6 +439,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -435,7 +451,14 @@ void EpollClasse::handleRequest(int client_fd) {
     
     // Parser la première ligne
     std::istringstream lineStream(firstLine);
-    lineStream >> method >> path >> protocol;
+    lineStream >> method >> fullPath >> protocol;
+    
+    // Extract clean path without query string
+    path = fullPath;
+    size_t questionPos = path.find('?');
+    if (questionPos != std::string::npos) {
+        path = path.substr(0, questionPos);
+    }
 
     // Validation des requêtes malformées - cas plus stricts
     if (method.empty() || path.empty()) {
@@ -443,6 +466,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -453,6 +477,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -463,6 +488,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -473,6 +499,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 505, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // HTTP Version Not Supported
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -483,6 +510,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -493,6 +521,7 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 405, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // Method Not Allowed
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
         close(client_fd);
         return;
     }
@@ -671,7 +700,13 @@ void EpollClasse::handleRequest(int client_fd) {
     // Parser les headers de la requête
     std::map<std::string, std::string> headers = parseHeaders(request);
     std::string body = parseBody(request);
-    std::string queryString = parseQueryString(request);
+    
+    // Extract query string from the full path
+    std::string queryString = "";
+    size_t queryPos = fullPath.find('?');
+    if (queryPos != std::string::npos) {
+        queryString = fullPath.substr(queryPos + 1);
+    }
     
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Processing %s request for path: %s -> %s", 
                    method.c_str(), path.c_str(), resolvedPath.c_str());
@@ -681,10 +716,10 @@ void EpollClasse::handleRequest(int client_fd) {
         if (method == "HEAD") {
             handleHeadRequest(client_fd, path, server);
         } else {
-            handleGetRequest(client_fd, path, server);
+            handleGetRequest(client_fd, path, server, queryString);
         }
     } else if (method == "POST") {
-        handlePostRequest(client_fd, path, body, headers, server);
+        handlePostRequest(client_fd, path, body, headers, server, queryString);
     } else if (method == "DELETE") {
         handleDeleteRequest(client_fd, path, server);
     } else {
@@ -692,9 +727,24 @@ void EpollClasse::handleRequest(int client_fd) {
         sendErrorResponse(client_fd, 501, server);
     }
     
-    // Fermer la connexion après traitement
-    close(client_fd);
-    timeoutManager.removeClient(client_fd);
+    // For CGI requests, don't close the connection here - let CGI handler manage it
+    // Check if this was a CGI request by looking for the client_fd in our CGI tracking
+    bool isCgiRequest = false;
+    for (std::map<int, int>::iterator cgiIt = _cgiToClient.begin(); cgiIt != _cgiToClient.end(); ++cgiIt) {
+        if (cgiIt->second == client_fd) {
+            isCgiRequest = true;
+            break;
+        }
+    }
+    
+    if (!isCgiRequest) {
+        // Not a CGI request, safe to close
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
+        close(client_fd);
+    }
+    // If it's a CGI request, the connection will be closed when CGI completes
 }
 
 // Fonction utilitaire pour envoyer une réponse
@@ -895,7 +945,7 @@ std::string EpollClasse::parseBody(const std::string &request) {
 }
 
 // Gestion des requêtes GET
-void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const Server &server) {
+void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const Server &server, const std::string &queryString) {
     std::string resolvedPath = resolvePath(server, path);
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "GET request for path: %s -> %s", path.c_str(), resolvedPath.c_str());
     
@@ -906,8 +956,8 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
         if (!interpreter.empty()) {
             std::map<std::string, std::string> emptyHeaders;
-            handleCgiRequest(client_fd, resolvedPath, "GET", parseQueryString(path), "", emptyHeaders, server);
-            return;
+            handleCgiRequest(client_fd, resolvedPath, "GET", queryString, "", emptyHeaders, server);
+            return; // CGI will handle connection closure
         }
     }
     
@@ -951,7 +1001,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
 
 // Gestion des requêtes POST
 void EpollClasse::handlePostRequest(int client_fd, const std::string &path, const std::string &body, 
-                                  const std::map<std::string, std::string> &headers, const Server &server) {
+                                  const std::map<std::string, std::string> &headers, const Server &server, const std::string &queryString) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "POST request for path: %s (body size: %zu bytes)", path.c_str(), body.length());
     
     // Vérifier la taille du corps de la requête avec une logique plus robuste
@@ -979,8 +1029,8 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
         std::string extension = resolvedPath.substr(dotPos);
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
         if (!interpreter.empty()) {
-            handleCgiRequest(client_fd, resolvedPath, "POST", parseQueryString(path), body, headers, server);
-            return;
+            handleCgiRequest(client_fd, resolvedPath, "POST", queryString, body, headers, server);
+            return; // CGI will handle connection closure
         }
     }
     
@@ -1242,35 +1292,51 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         return;
     }
     
-    // Créer les pipes pour la communication
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to create pipe for CGI");
+    // Create pipes for communication
+    int stdin_pipe[2], stdout_pipe[2];
+    if (pipe(stdin_pipe) == -1 || pipe(stdout_pipe) == -1) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to create pipes for CGI");
         sendErrorResponse(client_fd, 500, server);
+        if (stdin_pipe[0] != -1) {
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
+        }
+        if (stdout_pipe[0] != -1) {
+            close(stdout_pipe[0]);
+            close(stdout_pipe[1]);
+        }
         return;
     }
     
     pid_t pid = fork();
     if (pid == -1) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to fork for CGI");
-        close(pipefd[0]);
-        close(pipefd[1]);
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
         sendErrorResponse(client_fd, 500, server);
         return;
     }
     
     if (pid == 0) {
-        // Processus enfant - exécuter le script CGI
-        close(pipefd[0]); // Fermer le côté lecture
+        // Child process - execute CGI script
+        close(stdin_pipe[1]);   // Close write end of stdin pipe
+        close(stdout_pipe[0]);  // Close read end of stdout pipe
         
-        // Rediriger stdout vers le pipe
-        dup2(pipefd[1], STDOUT_FILENO);
-        close(pipefd[1]);
+        // Redirect stdin and stdout
+        dup2(stdin_pipe[0], STDIN_FILENO);
+        dup2(stdout_pipe[1], STDOUT_FILENO);
         
-        // Configurer les variables d'environnement CGI
+        close(stdin_pipe[0]);
+        close(stdout_pipe[1]);
+        
+        // Set up CGI environment variables
         setenv("REQUEST_METHOD", method.c_str(), 1);
         setenv("SCRIPT_NAME", scriptPath.c_str(), 1);
         setenv("QUERY_STRING", queryString.c_str(), 1);
+        setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
+        setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
         
         if (!body.empty()) {
             std::ostringstream contentLength;
@@ -1278,11 +1344,11 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
             setenv("CONTENT_LENGTH", contentLength.str().c_str(), 1);
         }
         
-        // Ajouter les headers HTTP comme variables d'environnement
+        // Add HTTP headers as environment variables
         for (std::map<std::string, std::string>::const_iterator it = headers.begin();
              it != headers.end(); ++it) {
             std::string envName = "HTTP_" + it->first;
-            // Remplacer les tirets par des underscores et mettre en majuscules
+            // Replace dashes with underscores and convert to uppercase
             for (size_t i = 0; i < envName.length(); ++i) {
                 if (envName[i] == '-') envName[i] = '_';
                 envName[i] = toupper(envName[i]);
@@ -1290,7 +1356,7 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
             setenv(envName.c_str(), it->second.c_str(), 1);
         }
         
-        // Déterminer l'interpréteur
+        // Determine interpreter
         size_t dotPos = scriptPath.find_last_of('.');
         if (dotPos != std::string::npos) {
             std::string extension = scriptPath.substr(dotPos);
@@ -1305,34 +1371,53 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
             execl(scriptPath.c_str(), scriptPath.c_str(), NULL);
         }
         
-        // Si on arrive ici, exec a échoué
+        // If we get here, exec failed
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to execute CGI script");
         exit(1);
     } else {
-        // Processus parent
-        close(pipefd[1]); // Fermer le côté écriture
+        // Parent process
+        close(stdin_pipe[0]);   // Close read end of stdin pipe
+        close(stdout_pipe[1]);  // Close write end of stdout pipe
         
-        // Configurer le pipe en mode non-bloquant
-        setNonBlocking(pipefd[0]);
+        // Send request body to CGI if present
+        if (!body.empty()) {
+            ssize_t written = write(stdin_pipe[1], body.c_str(), body.length());
+            if (written != static_cast<ssize_t>(body.length())) {
+                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Warning: Could not write full body to CGI stdin (%zd/%zu)", written, body.length());
+            }
+        }
+        close(stdin_pipe[1]); // Close stdin pipe, CGI will get EOF
         
-        // Créer la structure CGI
+        // Set stdout pipe to non-blocking
+        setNonBlocking(stdout_pipe[0]);
+        
+        // Create CGI process structure
         CgiProcess* cgiProcess = new CgiProcess();
-        cgiProcess->pipe_fd = pipefd[0];
+        cgiProcess->pipe_fd = stdout_pipe[0];
         cgiProcess->pid = pid;
         cgiProcess->start_time = time(NULL);
-        cgiProcess->cgiHandler = NULL; // Pas utilisé dans cette implémentation simplifiée
+        cgiProcess->cgiHandler = NULL;
+        cgiProcess->output = "";
         
-        // Ajouter à epoll pour surveiller la sortie
+        // Add CGI pipe to epoll for monitoring
         epoll_event event;
-        event.events = EPOLLIN | EPOLLET;
-        event.data.fd = pipefd[0];
-        addToEpoll(pipefd[0], event);
+        event.events = EPOLLIN; // Use level-triggered for CGI pipes too
+        event.data.fd = stdout_pipe[0];
         
-        // Enregistrer le processus CGI
-        _cgiProcesses[pipefd[0]] = cgiProcess;
-        _cgiToClient[pipefd[0]] = client_fd;
+        if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, stdout_pipe[0], &event) == -1) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to add CGI pipe to epoll");
+            delete cgiProcess;
+            close(stdout_pipe[0]);
+            kill(pid, SIGTERM);
+            sendErrorResponse(client_fd, 500, server);
+            return;
+        }
         
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process started with PID %d", pid);
+        // Register CGI process
+        _cgiProcesses[stdout_pipe[0]] = cgiProcess;
+        _cgiToClient[stdout_pipe[0]] = client_fd;
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process started with PID %d, pipe fd %d", pid, stdout_pipe[0]);
     }
 }
 
@@ -1340,66 +1425,127 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
 void EpollClasse::handleCgiOutput(int cgi_fd) {
     std::map<int, CgiProcess*>::iterator it = _cgiProcesses.find(cgi_fd);
     if (it == _cgiProcesses.end()) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process not found for fd %d", cgi_fd);
         return;
     }
     
     CgiProcess* process = it->second;
     char buffer[BUFFER_SIZE];
+    bool dataReceived = false;
     
-    ssize_t bytesRead = read(cgi_fd, buffer, BUFFER_SIZE - 1);
-    if (bytesRead > 0) {
-        buffer[bytesRead] = '\0';
-        process->output += std::string(buffer, bytesRead);
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Read %zd bytes from CGI", bytesRead);
-    } else if (bytesRead == 0 || bytesRead == -1) {
-        // CGI terminé ou erreur
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process finished");
+    // For edge-triggered mode, read all available data
+    ssize_t bytesRead;
+    while ((bytesRead = read(cgi_fd, buffer, BUFFER_SIZE - 1)) > 0) {
+        process->output.append(buffer, bytesRead);
+        dataReceived = true;
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Read %zd bytes from CGI process", bytesRead);
+    }
+    
+    if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        // No more data available for now, but CGI might still be running
+        if (dataReceived) {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI data received, waiting for more or completion");
+        }
+        return;
+    }
+    
+    // CGI process finished (bytesRead == 0) or error occurred
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process finished, total output: %zu bytes", process->output.length());
+    
+    // Find the corresponding client
+    std::map<int, int>::iterator clientIt = _cgiToClient.find(cgi_fd);
+    if (clientIt != _cgiToClient.end()) {
+        int client_fd = clientIt->second;
         
-        // Trouver le client correspondant
-        std::map<int, int>::iterator clientIt = _cgiToClient.find(cgi_fd);
-        if (clientIt != _cgiToClient.end()) {
-            int client_fd = clientIt->second;
-            
-            // Analyser la sortie CGI
-            std::string cgiOutput = process->output;
-            std::string headers;
-            std::string body;
-            
-            size_t headerEnd = cgiOutput.find("\r\n\r\n");
-            if (headerEnd == std::string::npos) {
-                headerEnd = cgiOutput.find("\n\n");
-                if (headerEnd != std::string::npos) {
-                    headers = cgiOutput.substr(0, headerEnd);
-                    body = cgiOutput.substr(headerEnd + 2);
-                } else {
-                    body = cgiOutput;
-                }
-            } else {
-                headers = cgiOutput.substr(0, headerEnd);
-                body = cgiOutput.substr(headerEnd + 4);
-            }
-            
-            // Construire la réponse HTTP
-            std::string response = "HTTP/1.1 200 OK\r\n";
-            response += "Date: " + getCurrentDateTime() + "\r\n";
-            response += "Server: Webserv/1.0\r\n";
-            
-            if (!headers.empty()) {
-                response += headers + "\r\n";
-            } else {
-                response += "Content-Type: text/html\r\n";
-            }
-            
-            response += "Content-Length: " + sizeToString(body.length()) + "\r\n";
-            response += "Connection: close\r\n\r\n";
-            response += body;
-            
-            send(client_fd, response.c_str(), response.length(), 0);
-            close(client_fd);
+        // Wait for the child process to complete
+        int status;
+        pid_t result = waitpid(process->pid, &status, WNOHANG);
+        if (result == 0) {
+            // Process still running, wait a bit more
+            usleep(10000); // 10ms
+            result = waitpid(process->pid, &status, WNOHANG);
         }
         
-        cleanupCgiProcess(cgi_fd);
+        if (result > 0) {
+            // Process completed
+            if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process exited with status %d", WEXITSTATUS(status));
+            }
+        }
+        
+        // Parse CGI output
+        std::string cgiOutput = process->output;
+        std::string responseHeaders;
+        std::string responseBody;
+        
+        // Look for headers separator
+        size_t headerEnd = cgiOutput.find("\r\n\r\n");
+        if (headerEnd == std::string::npos) {
+            headerEnd = cgiOutput.find("\n\n");
+            if (headerEnd != std::string::npos) {
+                responseHeaders = cgiOutput.substr(0, headerEnd);
+                responseBody = cgiOutput.substr(headerEnd + 2);
+            } else {
+                // No headers, treat all as body
+                responseBody = cgiOutput;
+            }
+        } else {
+            responseHeaders = cgiOutput.substr(0, headerEnd);
+            responseBody = cgiOutput.substr(headerEnd + 4);
+        }
+        
+        // Build HTTP response
+        std::string httpResponse = "HTTP/1.1 200 OK\r\n";
+        httpResponse += "Date: " + getCurrentDateTime() + "\r\n";
+        httpResponse += "Server: Webserv/1.0\r\n";
+        
+        // Add CGI headers if present
+        if (!responseHeaders.empty()) {
+            // Check if CGI provided a status line
+            if (responseHeaders.find("Status:") != std::string::npos) {
+                size_t statusPos = responseHeaders.find("Status:");
+                size_t statusEnd = responseHeaders.find("\n", statusPos);
+                std::string statusLine = responseHeaders.substr(statusPos + 7, statusEnd - statusPos - 7);
+                // Remove "Status:" and use the status code
+                httpResponse = "HTTP/1.1" + statusLine + "\r\n";
+                httpResponse += "Date: " + getCurrentDateTime() + "\r\n";
+                httpResponse += "Server: Webserv/1.0\r\n";
+                // Remove Status line from headers to avoid duplication
+                responseHeaders.erase(statusPos, statusEnd - statusPos + 1);
+            }
+            httpResponse += responseHeaders;
+            // Ensure CGI headers end with \r\n
+            if (!responseHeaders.empty() && responseHeaders.substr(responseHeaders.length() - 2) != "\r\n") {
+                httpResponse += "\r\n";
+            }
+            if (responseHeaders.find("Content-Type:") == std::string::npos) {
+                httpResponse += "Content-Type: text/html\r\n";
+            }
+        } else {
+            httpResponse += "Content-Type: text/html\r\n";
+        }
+        
+        httpResponse += "Content-Length: " + sizeToString(responseBody.length()) + "\r\n";
+        httpResponse += "Connection: close\r\n\r\n";
+        httpResponse += responseBody;
+        
+        // Send response to client
+        ssize_t sent = send(client_fd, httpResponse.c_str(), httpResponse.length(), 0);
+        if (sent < 0) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to send CGI response to client %d", client_fd);
+        } else {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent CGI response to client %d (%zd bytes)", client_fd, sent);
+        }
+        
+        // Close client connection
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
+        close(client_fd);
     }
+    
+    // Clean up CGI process
+    cleanupCgiProcess(cgi_fd);
 }
 
 // Nettoyage du processus CGI
@@ -1408,20 +1554,46 @@ void EpollClasse::cleanupCgiProcess(int cgi_fd) {
     if (it != _cgiProcesses.end()) {
         CgiProcess* process = it->second;
         
-        // Supprimer de epoll
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Cleaning up CGI process with PID %d", process->pid);
+        
+        // Remove from epoll first
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, cgi_fd, NULL);
+        
+        // Close the pipe
         close(cgi_fd);
         
-        // Terminer le processus s'il est encore actif
+        // Try to terminate the process gracefully, then forcefully if needed
         if (process->pid > 0) {
-            kill(process->pid, SIGTERM);
-            waitpid(process->pid, NULL, WNOHANG);
+            int status;
+            pid_t result = waitpid(process->pid, &status, WNOHANG);
+            
+            if (result == 0) {
+                // Process still running, try to terminate
+                kill(process->pid, SIGTERM);
+                usleep(100000); // Wait 100ms
+                result = waitpid(process->pid, &status, WNOHANG);
+                
+                if (result == 0) {
+                    // Still running, force kill
+                    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Force killing CGI process %d", process->pid);
+                    kill(process->pid, SIGKILL);
+                    waitpid(process->pid, &status, 0); // Wait for it to die
+                }
+            }
+            
+            if (result > 0) {
+                Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process %d terminated with status %d", 
+                              process->pid, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+            }
         }
         
         delete process;
         _cgiProcesses.erase(it);
     }
     
-    // Supprimer l'association CGI -> client
-    _cgiToClient.erase(cgi_fd);
+    // Remove the CGI->client mapping
+    std::map<int, int>::iterator clientIt = _cgiToClient.find(cgi_fd);
+    if (clientIt != _cgiToClient.end()) {
+        _cgiToClient.erase(clientIt);
+    }
 }
