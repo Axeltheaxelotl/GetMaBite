@@ -59,7 +59,7 @@ static std::string smartJoinRootAndPath(const std::string& root, const std::stri
 }
 
 // Constructeur
-EpollClasse::EpollClasse() : timeoutManager(60) // Augmenté à 60 secondes pour les très gros corps
+EpollClasse::EpollClasse() : _serverConfigs(NULL), timeoutManager(60) // Augmenté à 60 secondes pour les très gros corps
 {
     _epoll_fd = epoll_create1(0);
     if (_epoll_fd == -1)
@@ -101,7 +101,7 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vec
 {
     Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Setting up servers...");
     _servers = servers;
-    _serverConfigs = serverConfigs;
+    _serverConfigs = &serverConfigs;
 
     for (std::vector<ServerConfig>::iterator it = _servers.begin(); it != _servers.end(); ++it)
     {
@@ -110,8 +110,8 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vec
                       it->getHost().c_str(), it->getPort());
 
         // Log des informations de configuration
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", _serverConfigs[0].root.c_str());
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", _serverConfigs[0].index.c_str());
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", (*_serverConfigs)[0].root.c_str());
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", (*_serverConfigs)[0].index.c_str());
 
         epoll_event event;
         event.events = EPOLLIN; // Use level-triggered mode for more reliable operation
@@ -196,8 +196,8 @@ void EpollClasse::serverRun() {
                 if (clientIt != _cgiToClient.end()) {
                     int client_fd = clientIt->second;
                     Server defaultServer;
-                    if (!_serverConfigs.empty()) {
-                        defaultServer = _serverConfigs[0];
+                    if (!_serverConfigs->empty()) {
+                        defaultServer = (*_serverConfigs)[0];
                     }
                     sendErrorResponse(client_fd, 504, defaultServer);
                     close(client_fd);
@@ -241,8 +241,8 @@ bool EpollClasse::isCgiFd(int fd) {
 // Trouve un serveur correspondant à un hôte et un port donnés.
 int EpollClasse::findMatchingServer(const std::string& host, int port) {
     int defaultIndex = -1;
-    for (size_t i = 0; i < _serverConfigs.size(); ++i) {
-        const Server& server = _serverConfigs[i];
+    for (size_t i = 0; i < _serverConfigs->size(); ++i) {
+        const Server& server = (*_serverConfigs)[i];
 
         // Vérifie si ce serveur écoute sur ce port
         if (std::find(server.listen_ports.begin(), server.listen_ports.end(), port) != server.listen_ports.end()) {
@@ -403,7 +403,7 @@ void EpollClasse::handleRequest(int client_fd) {
     size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
     if (currentBufferSize > 10485760) { // 10MB limit
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Buffer too large for fd %d, closing connection", client_fd);
-        sendErrorResponse(client_fd, 413, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 413, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -436,7 +436,7 @@ void EpollClasse::handleRequest(int client_fd) {
     std::string firstLine;
     if (!std::getline(requestStream, firstLine) || firstLine.empty()) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Empty or invalid request line");
-        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -463,7 +463,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Validation des requêtes malformées - cas plus stricts
     if (method.empty() || path.empty()) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: empty method or path");
-        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -474,7 +474,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Validation de la longueur des éléments et caractères invalides
     if (method.length() > 10 || path.length() > 2048 || method.find('\0') != std::string::npos || path.find('\0') != std::string::npos) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: method or path too long or contains null bytes");
-        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -485,7 +485,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Vérifier que le chemin commence par "/"
     if (path.empty() || path[0] != '/') {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: path must start with /");
-        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -496,7 +496,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Vérifier que le protocole est HTTP/1.1 ou HTTP/1.0
     if (!protocol.empty() && protocol != "HTTP/1.1" && protocol != "HTTP/1.0") {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Unsupported protocol: %s", protocol.c_str());
-        sendErrorResponse(client_fd, 505, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // HTTP Version Not Supported
+        sendErrorResponse(client_fd, 505, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]); // HTTP Version Not Supported
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -507,7 +507,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Si aucun protocole n'est spécifié, c'est malformé en HTTP strict
     if (protocol.empty()) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Malformed request: missing HTTP protocol");
-        sendErrorResponse(client_fd, 400, _serverConfigs.empty() ? Server() : _serverConfigs[0]);
+        sendErrorResponse(client_fd, 400, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -518,7 +518,7 @@ void EpollClasse::handleRequest(int client_fd) {
     // Vérifier que la méthode est valide
     if (method != "GET" && method != "POST" && method != "DELETE" && method != "HEAD") {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Invalid HTTP method: %s", method.c_str());
-        sendErrorResponse(client_fd, 405, _serverConfigs.empty() ? Server() : _serverConfigs[0]); // Method Not Allowed
+        sendErrorResponse(client_fd, 405, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]); // Method Not Allowed
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
@@ -604,7 +604,7 @@ void EpollClasse::handleRequest(int client_fd) {
     }
     int idx = findMatchingServer(hostName, port);
     if (idx < 0) idx = 0;
-    const Server& server = _serverConfigs[idx];
+    const Server& server = (*_serverConfigs)[idx];
 
     // Trouver la location correspondante (plus long préfixe)
     const Location* matchedLocation = NULL;

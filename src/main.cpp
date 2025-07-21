@@ -15,7 +15,7 @@ int main(int argc, char **argv)
         // Parser la configuration
         Parser parser;
         parser.parseConfigFile(configPath);
-        std::vector<Server> servers = parser.getServers();
+        const std::vector<Server>& servers = parser.getServers();
         if (servers.empty())
             throw std::runtime_error("Impossible de charger la configuration.");
 

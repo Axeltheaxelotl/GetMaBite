@@ -27,7 +27,7 @@ private:
     int _biggest_fd;
     epoll_event _events[MAX_EVENTS];
     std::vector<ServerConfig> _servers;
-    std::vector<Server> _serverConfigs;
+    const std::vector<Server>* _serverConfigs;
     TimeoutManager timeoutManager;
     
     // CGI management

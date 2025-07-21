@@ -1,6 +1,18 @@
 #include"Location.hpp"
 
-Location::Location() : autoindex(false), return_code(0), client_max_body_size(1048576) {} // 1MB par défaut
+Location::Location() : 
+    path(),
+    root(),
+    alias(),
+    index(),
+    allow_methods(),
+    autoindex(false),
+    upload_path(),
+    return_url(),
+    return_code(0),
+    cgi_extensions(),
+    client_max_body_size(1048576)
+{}
 
 Location::~Location() {}
 
