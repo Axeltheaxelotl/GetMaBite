@@ -401,7 +401,7 @@ void EpollClasse::handleRequest(int client_fd) {
     
     // Check buffer size limit to prevent memory attacks
     size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
-    if (currentBufferSize > 10485760) { // 10MB limit
+    if (currentBufferSize > 1000000000) { // 1GB limit
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Buffer too large for fd %d, closing connection", client_fd);
         sendErrorResponse(client_fd, 413, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]);
         epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
@@ -514,17 +514,6 @@ void EpollClasse::handleRequest(int client_fd) {
         close(client_fd);
         return;
     }
-    
-    // Vérifier que la méthode est valide
-    if (method != "GET" && method != "POST" && method != "DELETE" && method != "HEAD") {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Invalid HTTP method: %s", method.c_str());
-        sendErrorResponse(client_fd, 405, _serverConfigs->empty() ? Server() : (*_serverConfigs)[0]); // Method Not Allowed
-        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-        timeoutManager.removeClient(client_fd);
-        _bufferManager.clear(client_fd);
-        close(client_fd);
-        return;
-    }
 
     // Gestion du chunked encoding - supporter au lieu de rejeter
     if (request.find("Transfer-Encoding: chunked") != std::string::npos) {
@@ -535,9 +524,6 @@ void EpollClasse::handleRequest(int client_fd) {
 
     if (path.empty())
         path = "/";
-    // Implement HEAD support: treat HEAD as GET and suppress body
-    bool isHead = (method == "HEAD");
-    std::string reqMethod = isHead ? "GET" : method;
 
     // Extract host header and route to appropriate server
     std::string hostHeader;
@@ -618,6 +604,55 @@ void EpollClasse::handleRequest(int client_fd) {
         }
     }
 
+    // Vérification des allow_methods AVANT tout autre traitement
+    std::vector<std::string> allowedMethods;
+    
+    if (matchedLocation && !matchedLocation->allow_methods.empty()) {
+        // Utiliser les méthodes de la location
+        allowedMethods = matchedLocation->allow_methods;
+    } else if (!server.allow_methods.empty()) {
+        // Utiliser les méthodes du serveur
+        allowedMethods = server.allow_methods;
+    } else {
+        // Valeurs par défaut si aucune configuration
+        allowedMethods.push_back("GET");
+        allowedMethods.push_back("POST");
+        allowedMethods.push_back("DELETE");
+    }
+    
+    // Vérifier si la méthode est autorisée
+    bool allowed = false;
+    for (size_t i = 0; i < allowedMethods.size(); ++i) {
+        if (allowedMethods[i] == method) {
+            allowed = true;
+            break;
+        }
+    }
+    
+    if (!allowed) {
+        // Générer la liste des méthodes autorisées
+        std::string allowHeader = "Allow: ";
+        for (size_t i = 0; i < allowedMethods.size(); ++i) {
+            if (i > 0) allowHeader += ", ";
+            allowHeader += allowedMethods[i];
+        }
+        std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+        std::ostringstream response;
+        response << "HTTP/1.1 405 Method Not Allowed\r\n"
+                 << allowHeader << "\r\n"
+                 << "Content-Type: text/html\r\n"
+                 << "Content-Length: " << body.size() << "\r\n"
+                 << "\r\n"
+                 << body;
+        sendResponse(client_fd, response.str());
+        close(client_fd);
+        return;
+    }
+
+    // AFTER method validation: Handle HEAD as GET for processing
+    bool isHead = (method == "HEAD");
+    std::string reqMethod = isHead ? "GET" : method;
+
     // Return directive handling: respect return_code/return_url before any other processing
     if (matchedLocation && matchedLocation->return_code != 0)
     {
@@ -626,72 +661,6 @@ void EpollClasse::handleRequest(int client_fd) {
         sendResponse(client_fd, redirectResponse);
         close(client_fd);
         return;
-    }
-
-    // Vérification des allow_methods
-    if (matchedLocation)
-    {
-        bool allowed = false;
-        
-        // Si aucune méthode n'est définie, autoriser GET, POST, DELETE par défaut
-        if (matchedLocation->allow_methods.empty()) {
-            allowed = (reqMethod == "GET" || reqMethod == "POST" || reqMethod == "DELETE");
-        } else {
-            for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-            {
-                if (matchedLocation->allow_methods[i] == reqMethod)
-                {
-                    allowed = true;
-                    break;
-                }
-            }
-        }
-        
-        if (!allowed)
-        {
-            // Générer la liste des méthodes autorisées
-            std::string allowHeader = "Allow: ";
-            if (matchedLocation->allow_methods.empty()) {
-                allowHeader += "GET, POST, DELETE";
-            } else {
-                for (size_t i = 0; i < matchedLocation->allow_methods.size(); ++i)
-                {
-                    if (i > 0) allowHeader += ", ";
-                    allowHeader += matchedLocation->allow_methods[i];
-                }
-            }
-            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-            std::ostringstream response;
-            response << "HTTP/1.1 405 Method Not Allowed\r\n"
-                     << allowHeader << "\r\n"
-                     << "Content-Type: text/html\r\n"
-                     << "Content-Length: " << body.size() << "\r\n"
-                     << "\r\n"
-                     << body;
-            sendResponse(client_fd, response.str());
-            close(client_fd);
-            return;
-        }
-    }
-    else
-    {
-        // Si aucune location ne correspond, autoriser GET, POST, DELETE par défaut
-        bool allowed = (reqMethod == "GET" || reqMethod == "POST" || reqMethod == "DELETE");
-        
-        if (!allowed) {
-            std::string allowHeader = "Allow: GET, POST, DELETE";
-            std::string body = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
-            std::ostringstream response;
-            response << "HTTP/1.1 405 Method Not Allowed\r\n"
-                     << allowHeader << "\r\n"
-                     << "Content-Type: text/html\r\n"
-                     << "Content-Length: " << body.size() << "\r\n"
-                     << "\r\n"
-                     << body;
-            sendResponse(client_fd, response.str());
-            close(client_fd);
-            return;
-        }
     }
 
     // Utiliser resolvePath pour obtenir le chemin réel
@@ -974,7 +943,19 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
             send(client_fd, response.c_str(), response.length(), 0);
             return;
         } else {
-            sendErrorResponse(client_fd, 403, server);
+            // Try to serve index file if autoindex is disabled
+            std::string indexFile = location ? location->index : server.index;
+            if (!indexFile.empty()) {
+                std::string indexPath = joinPath(resolvedPath, indexFile);
+                if (fileExists(indexPath)) {
+                    std::string content = readFile(indexPath);
+                    std::string mimeType = getMimeType(indexPath);
+                    std::string response = generateHttpResponse(200, mimeType, content);
+                    send(client_fd, response.c_str(), response.length(), 0);
+                    return;
+                }
+            }
+            sendErrorResponse(client_fd, 404, server);
             return;
         }
     }
