@@ -17,7 +17,8 @@
 #include"../cgi/CgiHandler.hpp"
 #include <stdexcept> // Pour gestion des erreurs par exceptions
 
-#define BUFFER_SIZE 8192
+#define BUFFER_SIZE 65536  // Augmenté à 64KB pour éviter les buffer overflow
+#define MAX_BUFFER_SIZE 10485760  // 10MB max pour les très gros fichiers
 
 // Déclaration de l'instance globale du RequestBufferManager
 RequestBufferManager _bufferManager;
@@ -41,8 +42,20 @@ static std::string joinPath(const std::string& left, const std::string& right) {
     return left + right;
 }
 
-// Utilitaire pour éviter le doublon de dossier (ex: /tests/tests/)
+// Utilitaire sécurisé pour éviter le doublon de dossier et empêcher path traversal
 static std::string smartJoinRootAndPath(const std::string& root, const std::string& path) {
+    // Validation de sécurité contre path traversal
+    if (path.find("../") != std::string::npos || path.find("..\\") != std::string::npos) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Security: Path traversal attempt blocked: %s", path.c_str());
+        return ""; // Retourner chemin vide pour déclencher une erreur 403
+    }
+    
+    // Vérifier les caractères dangereux
+    if (path.find('\0') != std::string::npos || path.find("//") != std::string::npos) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Security: Invalid characters in path: %s", path.c_str());
+        return "";
+    }
+    
     // netoie les slashes
     std::string cleanRoot = root;
     if (!cleanRoot.empty() && cleanRoot[cleanRoot.size() - 1] == '/')
@@ -50,6 +63,7 @@ static std::string smartJoinRootAndPath(const std::string& root, const std::stri
     std::string cleanPath = path;
     if (!cleanPath.empty() && cleanPath[0] == '/')
         cleanPath = cleanPath.substr(1);
+        
     // Si le path commence déjà par le nom du dossier root, on ne le rajoute pas
     size_t lastSlash = cleanRoot.find_last_of('/');
     std::string rootDir = (lastSlash != std::string::npos) ? cleanRoot.substr(lastSlash + 1) : cleanRoot;
@@ -109,9 +123,13 @@ void EpollClasse::setupServers(std::vector<ServerConfig> servers, const std::vec
         Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "Server Created on %s:%d", 
                       it->getHost().c_str(), it->getPort());
 
-        // Log des informations de configuration
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", (*_serverConfigs)[0].root.c_str());
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", (*_serverConfigs)[0].index.c_str());
+        // Log des informations de configuration avec vérification de sécurité
+        if (_serverConfigs && !_serverConfigs->empty()) {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Root directory: %s", (*_serverConfigs)[0].root.c_str());
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Index file: %s", (*_serverConfigs)[0].index.c_str());
+        } else {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error: No server configuration available");
+        }
 
         epoll_event event;
         event.events = EPOLLIN; // Use level-triggered mode for more reliable operation
@@ -126,7 +144,7 @@ void EpollClasse::serverRun() {
     static int timeout_check_counter = 0;
     
     while (true) {
-        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 50); // Timeout encore plus réduit à 50ms
+        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // Timeout optimisé à 1 seconde
         if (event_count == -1) {
             if (errno == EINTR) {
                 continue; // Interruption par signal, continuer

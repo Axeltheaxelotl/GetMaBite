@@ -2,81 +2,1015 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Tests HTTP Webserv</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Webserv Advanced Testing Suite</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; margin: 2em; background: #f8f8f8; }
-        h1 { color: #333; }
-        section { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; margin-bottom: 2em; padding: 1em 2em; }
-        label, input, button, textarea { display: block; margin: 0.5em 0; }
-        .result { background: #eee; padding: 0.5em; border-radius: 4px; margin-top: 0.5em; }
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --dark-bg: #1f2937;
+            --light-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-dark: #111827;
+            --text-light: #6b7280;
+            --border-color: #e5e7eb;
+            --shadow: 0 10px 25px rgba(0,0,0,0.1);
+            --shadow-hover: 0 20px 40px rgba(0,0,0,0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 1rem;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: rgba(255,255,255,0.9);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.95);
+            padding: 1.5rem;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .stat-card i {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-dark);
+            display: block;
+        }
+
+        .stat-label {
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            animation: fadeInUp 0.8s ease-out 0.4s both;
+        }
+
+        .test-section {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .test-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+
+        .test-section:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header i {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            color: var(--primary-color);
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: var(--light-bg);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            min-width: 120px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--error-color);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .result-panel {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 10px;
+            background: var(--light-bg);
+            border: 1px solid var(--border-color);
+            min-height: 100px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .result-success {
+            border-color: var(--success-color);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .result-error {
+            border-color: var(--error-color);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .advanced-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
+        .status-online {
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-color);
+        }
+
+        .status-offline {
+            background: var(--error-color);
+        }
+
+        @media (max-width: 768px) {
+            .test-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .advanced-controls {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>Tests HTTP Webserv</h1>
-    <section>
-        <h2>GET</h2>
-        <a href="/tests/index.html" target="_blank">GET ce fichier (index.html)</a>
-        <button onclick="testGet()">GET /tests/test.txt (JS)</button>
-        <div id="getResult" class="result"></div>
-    </section>
-    <section>
-        <h2>POST</h2>
-        <form id="postForm" onsubmit="testPost(event)">
-            <label>Contenu à envoyer :</label>
-            <textarea name="content" rows="3">Ceci est un test POST</textarea>
-            <button type="submit">POST sur /tests/post_result.txt</button>
-        </form>
-        <div id="postResult" class="result"></div>
-    </section>
-    <section>
-        <h2>DELETE</h2>
-        <button onclick="testDelete()">DELETE /tests/post_result.txt</button>
-        <div id="deleteResult" class="result"></div>
-    </section>
-    <section>
-        <h2>Upload de fichier (POST)</h2>
-        <form id="uploadForm" enctype="multipart/form-data" onsubmit="testUpload(event)">
-            <input type="file" name="file" required>
-            <button type="submit">Uploader sur /tests/uploaded_file.txt</button>
-        </form>
-        <div id="uploadResult" class="result"></div>
-    </section>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-rocket"></i> Webserv Advanced Testing Suite</h1>
+            <p>Interface de test complète et moderne pour votre serveur web HTTP/1.1</p>
+            <div class="status-indicator status-online" id="serverStatus"></div>
+            <span id="serverStatusText">Serveur en ligne</span>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <i class="fas fa-chart-line"></i>
+                <span class="stat-number" id="totalRequests">0</span>
+                <span class="stat-label">Requêtes totales</span>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-clock"></i>
+                <span class="stat-number" id="avgResponseTime">0ms</span>
+                <span class="stat-label">Temps de réponse moyen</span>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-check-circle"></i>
+                <span class="stat-number" id="successRate">100%</span>
+                <span class="stat-label">Taux de succès</span>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-database"></i>
+                <span class="stat-number" id="dataTransferred">0 KB</span>
+                <span class="stat-label">Données transférées</span>
+            </div>
+        </div>
+
+        <div class="test-grid">
+            <!-- Section GET Tests -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-download"></i>
+                    <h2>Tests GET</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label>URL à tester :</label>
+                    <input type="text" class="form-control" id="getUrl" value="/tests/index.html" placeholder="/path/to/resource">
+                </div>
+                
+                <div class="advanced-controls">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="getHeaders">
+                        <label for="getHeaders">Afficher les headers</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="getTime" checked>
+                        <label for="getTime">Mesurer le temps</label>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="testGet()">
+                    <i class="fas fa-play"></i> Exécuter GET
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="getProgress"></div>
+                </div>
+                
+                <div id="getResult" class="result-panel">Cliquez sur "Exécuter GET" pour commencer le test...</div>
+            </section>
+
+            <!-- Section POST Tests -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-upload"></i>
+                    <h2>Tests POST</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label>URL de destination :</label>
+                    <input type="text" class="form-control" id="postUrl" value="/tests/post_result.txt">
+                </div>
+                
+                <div class="form-group">
+                    <label>Contenu à envoyer :</label>
+                    <textarea class="form-control" id="postContent" rows="4" placeholder="Tapez votre contenu ici...">Ceci est un test POST avancé avec timestamp: ${new Date().toISOString()}</textarea>
+                </div>
+                
+                <div class="advanced-controls">
+                    <div class="form-group">
+                        <label>Content-Type :</label>
+                        <select class="form-control" id="postContentType">
+                            <option value="text/plain">text/plain</option>
+                            <option value="application/json">application/json</option>
+                            <option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn btn-success" onclick="testPost()">
+                    <i class="fas fa-paper-plane"></i> Exécuter POST
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="postProgress"></div>
+                </div>
+                
+                <div id="postResult" class="result-panel">Prêt pour le test POST...</div>
+            </section>
+
+            <!-- Section DELETE Tests -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-trash"></i>
+                    <h2>Tests DELETE</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label>Fichier à supprimer :</label>
+                    <input type="text" class="form-control" id="deleteUrl" value="/tests/post_result.txt">
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="deleteConfirm">
+                    <label for="deleteConfirm">Je confirme la suppression</label>
+                </div>
+                
+                <button class="btn btn-danger" onclick="testDelete()">
+                    <i class="fas fa-trash-alt"></i> Exécuter DELETE
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="deleteProgress"></div>
+                </div>
+                
+                <div id="deleteResult" class="result-panel">Sélectionnez un fichier et confirmez...</div>
+            </section>
+
+            <!-- Section Upload Files -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h2>Upload de Fichiers</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label>Sélectionner un fichier :</label>
+                    <input type="file" class="form-control" id="uploadFile" multiple>
+                </div>
+                
+                <div class="form-group">
+                    <label>Nom du fichier de destination :</label>
+                    <input type="text" class="form-control" id="uploadDestination" value="/tests/uploaded_file.txt">
+                </div>
+                
+                <button class="btn btn-primary" onclick="testUpload()">
+                    <i class="fas fa-upload"></i> Uploader le fichier
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="uploadProgress"></div>
+                </div>
+                
+                <div id="uploadResult" class="result-panel">Aucun fichier sélectionné...</div>
+            </section>
+
+            <!-- Section CGI Tests -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-code"></i>
+                    <h2>Tests CGI</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label>Script CGI :</label>
+                    <select class="form-control" id="cgiScript">
+                        <option value="/tests/simple.cgi.py">Simple CGI Test</option>
+                        <option value="/tests/aaa.cgi.py">Advanced CGI Test</option>
+                        <option value="/main/tests/error.cgi.py">Error CGI Test</option>
+                        <option value="/main/tests/stderr.cgi.py">Stderr CGI Test</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Paramètres GET (query string) :</label>
+                    <input type="text" class="form-control" id="cgiQuery" placeholder="param1=value1&param2=value2">
+                </div>
+                
+                <div class="form-group">
+                    <label>Données POST (optionnel) :</label>
+                    <textarea class="form-control" id="cgiPostData" rows="3" placeholder="Données à envoyer en POST au script CGI"></textarea>
+                </div>
+                
+                <button class="btn btn-warning" onclick="testCGI()">
+                    <i class="fas fa-terminal"></i> Exécuter CGI
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cgiProgress"></div>
+                </div>
+                
+                <div id="cgiResult" class="result-panel">Sélectionnez un script CGI...</div>
+            </section>
+
+            <!-- Section Performance Tests -->
+            <section class="test-section">
+                <div class="section-header">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <h2>Tests de Performance</h2>
+                </div>
+                
+                <div class="advanced-controls">
+                    <div class="form-group">
+                        <label>Nombre de requêtes :</label>
+                        <input type="number" class="form-control" id="perfRequests" value="10" min="1" max="1000">
+                    </div>
+                    <div class="form-group">
+                        <label>Concurrence :</label>
+                        <input type="number" class="form-control" id="perfConcurrency" value="5" min="1" max="50">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>URL à tester :</label>
+                    <input type="text" class="form-control" id="perfUrl" value="/tests/index.html">
+                </div>
+                
+                <button class="btn btn-primary" onclick="testPerformance()">
+                    <i class="fas fa-rocket"></i> Lancer le test
+                </button>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="perfProgress"></div>
+                </div>
+                
+                <div id="perfResult" class="result-panel">Configurez les paramètres et lancez le test...</div>
+            </section>
+        </div>
+    </div>
     <script>
-    function testGet() {
-        fetch('/tests/test.txt')
-            .then(r => r.text())
-            .then(txt => document.getElementById('getResult').textContent = txt)
-            .catch(e => document.getElementById('getResult').textContent = 'Erreur: ' + e);
-    }
-    function testPost(e) {
-        e.preventDefault();
-        const data = new FormData(document.getElementById('postForm'));
-        fetch('/tests/post_result.txt', {
-            method: 'POST',
-            body: data.get('content')
-        })
-        .then(r => r.text())
-        .then(txt => document.getElementById('postResult').textContent = txt)
-        .catch(e => document.getElementById('postResult').textContent = 'Erreur: ' + e);
-    }
-    function testDelete() {
-        fetch('/tests/post_result.txt', { method: 'DELETE' })
-            .then(r => r.text())
-            .then(txt => document.getElementById('deleteResult').textContent = txt)
-            .catch(e => document.getElementById('deleteResult').textContent = 'Erreur: ' + e);
-    }
-    function testUpload(e) {
-        e.preventDefault();
-        const form = document.getElementById('uploadForm');
-        const data = new FormData(form);
-        fetch('/tests/uploaded_file.txt', {
-            method: 'POST',
-            body: data.get('file')
-        })
-        .then(r => r.text())
-        .then(txt => document.getElementById('uploadResult').textContent = txt)
-        .catch(e => document.getElementById('uploadResult').textContent = 'Erreur: ' + e);
-    }
+        // Variables globales pour les statistiques
+        let stats = {
+            totalRequests: 0,
+            totalResponseTime: 0,
+            successCount: 0,
+            dataTransferred: 0
+        };
+
+        // Fonction utilitaire pour formater les octets
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Fonction utilitaire pour mettre à jour les statistiques
+        function updateStats(responseTime, success, dataSize = 0) {
+            stats.totalRequests++;
+            stats.totalResponseTime += responseTime;
+            if (success) stats.successCount++;
+            stats.dataTransferred += dataSize;
+
+            // Mise à jour de l'affichage
+            document.getElementById('totalRequests').textContent = stats.totalRequests;
+            document.getElementById('avgResponseTime').textContent = 
+                Math.round(stats.totalResponseTime / stats.totalRequests) + 'ms';
+            document.getElementById('successRate').textContent = 
+                Math.round((stats.successCount / stats.totalRequests) * 100) + '%';
+            document.getElementById('dataTransferred').textContent = 
+                formatBytes(stats.dataTransferred);
+        }
+
+        // Fonction utilitaire pour animer la barre de progression
+        function animateProgress(elementId, duration = 1000) {
+            const progressBar = document.getElementById(elementId);
+            progressBar.style.width = '0%';
+            
+            setTimeout(() => {
+                progressBar.style.width = '100%';
+            }, 100);
+            
+            setTimeout(() => {
+                progressBar.style.width = '0%';
+            }, duration);
+        }
+
+        // Fonction utilitaire pour afficher les résultats
+        function displayResult(elementId, content, isSuccess = true, isLoading = false) {
+            const element = document.getElementById(elementId);
+            
+            if (isLoading) {
+                element.className = 'result-panel';
+                element.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+                return;
+            }
+            
+            element.className = isSuccess ? 'result-panel result-success' : 'result-panel result-error';
+            element.textContent = content;
+        }
+
+        // Test GET avancé
+        async function testGet() {
+            const url = document.getElementById('getUrl').value;
+            const showHeaders = document.getElementById('getHeaders').checked;
+            const measureTime = document.getElementById('getTime').checked;
+            
+            displayResult('getResult', '', true, true);
+            animateProgress('getProgress');
+            
+            const startTime = measureTime ? performance.now() : 0;
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                });
+                
+                const endTime = measureTime ? performance.now() : 0;
+                const responseTime = endTime - startTime;
+                
+                const text = await response.text();
+                const dataSize = new Blob([text]).size;
+                
+                let result = `✅ GET ${url}\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+                
+                if (measureTime) {
+                    result += `Temps de réponse: ${Math.round(responseTime)}ms\n`;
+                }
+                
+                result += `Taille: ${formatBytes(dataSize)}\n`;
+                
+                if (showHeaders) {
+                    result += '\n📋 Headers de réponse:\n';
+                    for (let [key, value] of response.headers.entries()) {
+                        result += `${key}: ${value}\n`;
+                    }
+                }
+                
+                result += '\n📄 Contenu (premiers 500 caractères):\n';
+                result += text.substring(0, 500);
+                if (text.length > 500) result += '...';
+                
+                displayResult('getResult', result, true);
+                updateStats(responseTime, response.ok, dataSize);
+                
+            } catch (error) {
+                displayResult('getResult', `❌ Erreur GET: ${error.message}`, false);
+                updateStats(0, false);
+            }
+        }
+
+        // Test POST avancé
+        async function testPost() {
+            const url = document.getElementById('postUrl').value;
+            const content = document.getElementById('postContent').value;
+            const contentType = document.getElementById('postContentType').value;
+            
+            displayResult('postResult', '', true, true);
+            animateProgress('postProgress');
+            
+            const startTime = performance.now();
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': contentType
+                    },
+                    body: content
+                });
+                
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                const responseText = await response.text();
+                const dataSize = new Blob([content]).size;
+                
+                let result = `✅ POST ${url}\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+                result += `Temps de réponse: ${Math.round(responseTime)}ms\n`;
+                result += `Données envoyées: ${formatBytes(dataSize)}\n`;
+                result += `Content-Type: ${contentType}\n\n`;
+                result += `📄 Réponse du serveur:\n${responseText}`;
+                
+                displayResult('postResult', result, response.ok);
+                updateStats(responseTime, response.ok, dataSize);
+                
+            } catch (error) {
+                displayResult('postResult', `❌ Erreur POST: ${error.message}`, false);
+                updateStats(0, false);
+            }
+        }
+
+        // Test DELETE avancé
+        async function testDelete() {
+            const url = document.getElementById('deleteUrl').value;
+            const confirm = document.getElementById('deleteConfirm').checked;
+            
+            if (!confirm) {
+                displayResult('deleteResult', '⚠️ Veuillez confirmer la suppression en cochant la case', false);
+                return;
+            }
+            
+            displayResult('deleteResult', '', true, true);
+            animateProgress('deleteProgress');
+            
+            const startTime = performance.now();
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'DELETE'
+                });
+                
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                const responseText = await response.text();
+                
+                let result = `🗑️ DELETE ${url}\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
+                result += `📄 Réponse du serveur:\n${responseText}`;
+                
+                displayResult('deleteResult', result, response.ok);
+                updateStats(responseTime, response.ok);
+                
+                // Décocher la confirmation après utilisation
+                document.getElementById('deleteConfirm').checked = false;
+                
+            } catch (error) {
+                displayResult('deleteResult', `❌ Erreur DELETE: ${error.message}`, false);
+                updateStats(0, false);
+            }
+        }
+
+        // Test d'upload avancé
+        async function testUpload() {
+            const fileInput = document.getElementById('uploadFile');
+            const destination = document.getElementById('uploadDestination').value;
+            
+            if (!fileInput.files.length) {
+                displayResult('uploadResult', '⚠️ Veuillez sélectionner au moins un fichier', false);
+                return;
+            }
+            
+            displayResult('uploadResult', '', true, true);
+            animateProgress('uploadProgress');
+            
+            const file = fileInput.files[0];
+            const startTime = performance.now();
+            
+            try {
+                const response = await fetch(destination, {
+                    method: 'POST',
+                    body: file,
+                    headers: {
+                        'Content-Type': file.type || 'application/octet-stream'
+                    }
+                });
+                
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                const responseText = await response.text();
+                
+                let result = `📁 UPLOAD ${destination}\n`;
+                result += `Fichier: ${file.name}\n`;
+                result += `Taille: ${formatBytes(file.size)}\n`;
+                result += `Type: ${file.type || 'application/octet-stream'}\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
+                result += `📄 Réponse du serveur:\n${responseText}`;
+                
+                displayResult('uploadResult', result, response.ok);
+                updateStats(responseTime, response.ok, file.size);
+                
+            } catch (error) {
+                displayResult('uploadResult', `❌ Erreur UPLOAD: ${error.message}`, false);
+                updateStats(0, false);
+            }
+        }
+
+        // Test CGI avancé
+        async function testCGI() {
+            const script = document.getElementById('cgiScript').value;
+            const query = document.getElementById('cgiQuery').value;
+            const postData = document.getElementById('cgiPostData').value;
+            
+            let url = script;
+            if (query) url += '?' + query;
+            
+            displayResult('cgiResult', '', true, true);
+            animateProgress('cgiProgress');
+            
+            const startTime = performance.now();
+            
+            try {
+                const options = {
+                    method: postData ? 'POST' : 'GET',
+                    headers: {}
+                };
+                
+                if (postData) {
+                    options.body = postData;
+                    options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                }
+                
+                const response = await fetch(url, options);
+                
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                const responseText = await response.text();
+                
+                let result = `🐍 CGI ${script}\n`;
+                result += `Méthode: ${options.method}\n`;
+                result += `Query: ${query || 'Aucune'}\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
+                
+                if (postData) {
+                    result += `📤 Données envoyées:\n${postData}\n\n`;
+                }
+                
+                result += `📄 Réponse HTML:\n${responseText}`;
+                
+                displayResult('cgiResult', result, response.ok);
+                updateStats(responseTime, response.ok, responseText.length);
+                
+            } catch (error) {
+                displayResult('cgiResult', `❌ Erreur CGI: ${error.message}`, false);
+                updateStats(0, false);
+            }
+        }
+
+        // Test de performance avancé
+        async function testPerformance() {
+            const requests = parseInt(document.getElementById('perfRequests').value);
+            const concurrency = parseInt(document.getElementById('perfConcurrency').value);
+            const url = document.getElementById('perfUrl').value;
+            
+            displayResult('perfResult', `🚀 Lancement de ${requests} requêtes avec ${concurrency} connexions simultanées...`, true, true);
+            
+            const results = {
+                success: 0,
+                errors: 0,
+                times: [],
+                totalData: 0
+            };
+            
+            const startTime = performance.now();
+            
+            // Fonction pour exécuter une requête
+            const makeRequest = async () => {
+                const reqStart = performance.now();
+                try {
+                    const response = await fetch(url);
+                    const text = await response.text();
+                    const reqEnd = performance.now();
+                    
+                    results.times.push(reqEnd - reqStart);
+                    results.totalData += text.length;
+                    
+                    if (response.ok) {
+                        results.success++;
+                    } else {
+                        results.errors++;
+                    }
+                } catch (error) {
+                    results.errors++;
+                }
+            };
+            
+            // Exécution des requêtes par batch pour respecter la concurrence
+            const batches = [];
+            for (let i = 0; i < requests; i += concurrency) {
+                const batchSize = Math.min(concurrency, requests - i);
+                const batch = [];
+                
+                for (let j = 0; j < batchSize; j++) {
+                    batch.push(makeRequest());
+                }
+                
+                batches.push(Promise.all(batch));
+                
+                // Mise à jour de la progression
+                const progress = ((i + batchSize) / requests) * 100;
+                document.getElementById('perfProgress').style.width = progress + '%';
+            }
+            
+            try {
+                await Promise.all(batches);
+                
+                const endTime = performance.now();
+                const totalTime = endTime - startTime;
+                
+                // Calculs statistiques
+                const avgTime = results.times.reduce((a, b) => a + b, 0) / results.times.length;
+                const minTime = Math.min(...results.times);
+                const maxTime = Math.max(...results.times);
+                const successRate = (results.success / requests) * 100;
+                const throughput = requests / (totalTime / 1000);
+                
+                let result = `📊 RÉSULTATS DE PERFORMANCE\n`;
+                result += `═══════════════════════════\n`;
+                result += `URL testée: ${url}\n`;
+                result += `Requêtes totales: ${requests}\n`;
+                result += `Concurrence: ${concurrency}\n\n`;
+                result += `✅ Succès: ${results.success}\n`;
+                result += `❌ Erreurs: ${results.errors}\n`;
+                result += `📈 Taux de succès: ${successRate.toFixed(1)}%\n\n`;
+                result += `⏱️ Temps de réponse moyen: ${avgTime.toFixed(1)}ms\n`;
+                result += `⚡ Temps minimum: ${minTime.toFixed(1)}ms\n`;
+                result += `🐌 Temps maximum: ${maxTime.toFixed(1)}ms\n\n`;
+                result += `🚀 Débit: ${throughput.toFixed(1)} req/s\n`;
+                result += `📊 Données totales: ${formatBytes(results.totalData)}\n`;
+                result += `⏰ Temps total: ${totalTime.toFixed(1)}ms`;
+                
+                displayResult('perfResult', result, results.errors === 0);
+                
+                // Mise à jour des statistiques globales
+                updateStats(avgTime, results.errors === 0, results.totalData);
+                
+            } catch (error) {
+                displayResult('perfResult', `❌ Erreur lors du test de performance: ${error.message}`, false);
+            }
+            
+            setTimeout(() => {
+                document.getElementById('perfProgress').style.width = '0%';
+            }, 2000);
+        }
+
+        // Vérification de l'état du serveur au chargement
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/tests/index.html', { 
+                    method: 'HEAD',
+                    cache: 'no-cache'
+                });
+                
+                const statusIndicator = document.getElementById('serverStatus');
+                const statusText = document.getElementById('serverStatusText');
+                
+                if (response.ok) {
+                    statusIndicator.className = 'status-indicator status-online';
+                    statusText.textContent = 'Serveur en ligne';
+                } else {
+                    statusIndicator.className = 'status-indicator status-offline';
+                    statusText.textContent = 'Serveur hors ligne';
+                }
+            } catch (error) {
+                const statusIndicator = document.getElementById('serverStatus');
+                const statusText = document.getElementById('serverStatusText');
+                statusIndicator.className = 'status-indicator status-offline';
+                statusText.textContent = 'Serveur inaccessible';
+            }
+        }
+
+        // Initialisation au chargement de la page
+        document.addEventListener('DOMContentLoaded', function() {
+            checkServerStatus();
+            
+            // Vérification périodique du statut du serveur
+            setInterval(checkServerStatus, 30000); // Toutes les 30 secondes
+            
+            // Mise à jour du placeholder du contenu POST avec timestamp
+            const postContent = document.getElementById('postContent');
+            postContent.value = `Ceci est un test POST avancé avec timestamp: ${new Date().toISOString()}`;
+        });
     </script>
 </body>
 </html>
