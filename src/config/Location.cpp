@@ -11,7 +11,7 @@ Location::Location() :
     return_url(),
     return_code(0),
     cgi_extensions(),
-    client_max_body_size(1048576)
+    client_max_body_size(0)
 {}
 
 Location::~Location() {}

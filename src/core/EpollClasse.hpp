@@ -65,11 +65,13 @@ private:
     void handleError(int fd);
     
     // CGI handling
-    void handleCgiRequest(int client_fd, const std::string &scriptPath, const std::string &method,
+    void handleCgiRequest(int client_fd, const std::string &scriptPath, const std::string &requestPath, const std::string &method,
                          const std::string &queryString, const std::string &body,
                          const std::map<std::string, std::string> &headers, const Server &server);
     void handleCgiOutput(int cgi_fd);
+    void handleCgiStdinWrite(int stdin_fd);
     void cleanupCgiProcess(int cgi_fd);
+    bool isCgiStdinFd(int fd);
     
     // File upload handling
     void handleFileUpload(int client_fd, const std::string &body, 

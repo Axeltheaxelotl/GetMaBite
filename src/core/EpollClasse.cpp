@@ -16,6 +16,8 @@
 #include "../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
 #include <stdexcept> // Pour gestion des erreurs par exceptions
+#include <fnmatch.h>     // for fnmatch
+#include <algorithm>     // for std::count
 
 #define BUFFER_SIZE 65536  // Augmenté à 64KB pour éviter les buffer overflow
 #define MAX_BUFFER_SIZE 10485760  // 10MB max pour les très gros fichiers
@@ -165,6 +167,11 @@ void EpollClasse::serverRun() {
                 } else {
                     handleRequest(fd);
                     timeoutManager.updateClientActivity(fd);
+                }
+            } else if (_events[i].events & EPOLLOUT) {
+                // Handle CGI stdin writing
+                if (isCgiStdinFd(fd)) {
+                    handleCgiStdinWrite(fd);
                 }
             } else if (_events[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
                 if (isCgiFd(fd)) {
@@ -611,17 +618,37 @@ void EpollClasse::handleRequest(int client_fd) {
     const Server& server = (*_serverConfigs)[idx];
 
     // Trouver la location correspondante (plus long préfixe)
-    const Location* matchedLocation = NULL;
-    size_t maxMatch = 0;
-    for (std::vector<Location>::const_iterator it = server.locations.begin(); it != server.locations.end(); ++it)
-    {
-        if (path.find(it->path) == 0 && it->path.length() > maxMatch)
-        {
-            matchedLocation = &(*it);
-            maxMatch = it->path.length();
+const Location* matchedLocation = NULL;
+size_t bestSpecificity = 0;
+
+for (std::vector<Location>::const_iterator it = server.locations.begin();
+     it != server.locations.end(); ++it)
+{
+    const std::string& pattern = it->path;
+    bool doesMatch = false;
+    size_t spec = 0;
+
+    if (pattern.find_first_of("*?") != std::string::npos) {
+        // wildcarded pattern
+        if (fnmatch(pattern.c_str(), path.c_str(), 0) == 0) {
+            doesMatch = true;
+            // count non‑wildcard chars as specificity
+            spec = pattern.length() - std::count(pattern.begin(), pattern.end(), '*')
+                                  - std::count(pattern.begin(), pattern.end(), '?');
+        }
+    } else {
+        // plain prefix
+        if (path.compare(0, pattern.length(), pattern) == 0) {
+            doesMatch = true;
+            spec = pattern.length();
         }
     }
 
+    if (doesMatch && spec > bestSpecificity) {
+        matchedLocation   = &(*it);
+        bestSpecificity   = spec;
+    }
+}
     // Vérification des allow_methods AVANT tout autre traitement
     std::vector<std::string> allowedMethods;
     
@@ -943,7 +970,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
         if (!interpreter.empty()) {
             std::map<std::string, std::string> emptyHeaders;
-            handleCgiRequest(client_fd, resolvedPath, "GET", queryString, "", emptyHeaders, server);
+            handleCgiRequest(client_fd, resolvedPath, path, "GET", queryString, "", emptyHeaders, server);
             return; // CGI will handle connection closure
         }
     }
@@ -1009,7 +1036,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
     
     // Si maxBodySize est 0, utiliser une valeur par défaut
     if (maxBodySize == 0) {
-        maxBodySize = server.client_max_body_size > 0 ? server.client_max_body_size : 1048576; // 1MB par défaut
+        maxBodySize = server.client_max_body_size > 0 ? server.client_max_body_size : 1048576000; // 1GB par défaut
     }
     
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Body size check: %zu bytes (max allowed: %zu bytes)", body.length(), maxBodySize);
@@ -1028,7 +1055,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
         std::string extension = resolvedPath.substr(dotPos);
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
         if (!interpreter.empty()) {
-            handleCgiRequest(client_fd, resolvedPath, "POST", queryString, body, headers, server);
+            handleCgiRequest(client_fd, resolvedPath, path, "POST", queryString, body, headers, server);
             return; // CGI will handle connection closure
         }
     }
@@ -1281,7 +1308,7 @@ std::map<std::string, std::string> EpollClasse::parseMultipartData(const std::st
 }
 
 // Gestion des requêtes CGI
-void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath, const std::string &method,
+void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath, const std::string &requestPath, const std::string &method,
                                  const std::string &queryString, const std::string &body,
                                  const std::map<std::string, std::string> &headers, const Server &server) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Handling CGI request: %s", scriptPath.c_str());
@@ -1337,6 +1364,22 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         setenv("SERVER_PROTOCOL", "HTTP/1.1", 1);
         setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
         
+        // Set REQUEST_URI - the full original request URI including query string
+        std::string requestUri = requestPath;
+        if (!queryString.empty()) {
+            requestUri += "?" + queryString;
+        }
+        setenv("REQUEST_URI", requestUri.c_str(), 1);
+        
+        // Set PATH_INFO - using the request path as per CGI standard
+        // This should be the part of the URL after the script name
+        setenv("PATH_INFO", requestPath.c_str(), 1);
+
+        // Set additional standard CGI variables
+        setenv("SERVER_NAME", "localhost", 1);
+        setenv("SERVER_PORT", "8000", 1);
+        setenv("REMOTE_ADDR", "127.0.0.1", 1);
+
         if (!body.empty()) {
             std::ostringstream contentLength;
             contentLength << body.length();
@@ -1378,16 +1421,8 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         close(stdin_pipe[0]);   // Close read end of stdin pipe
         close(stdout_pipe[1]);  // Close write end of stdout pipe
         
-        // Send request body to CGI if present
-        if (!body.empty()) {
-            ssize_t written = write(stdin_pipe[1], body.c_str(), body.length());
-            if (written != static_cast<ssize_t>(body.length())) {
-                Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Warning: Could not write full body to CGI stdin (%zd/%zu)", written, body.length());
-            }
-        }
-        close(stdin_pipe[1]); // Close stdin pipe, CGI will get EOF
-        
-        // Set stdout pipe to non-blocking
+        // Set both pipes to non-blocking
+        setNonBlocking(stdin_pipe[1]);
         setNonBlocking(stdout_pipe[0]);
         
         // Create CGI process structure
@@ -1397,6 +1432,35 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         cgiProcess->start_time = time(NULL);
         cgiProcess->cgiHandler = NULL;
         cgiProcess->output = "";
+        cgiProcess->input_body = "";
+        cgiProcess->input_written = 0;
+        cgiProcess->stdin_fd = -1;
+        
+        // Store the body and track writing progress for large bodies
+        if (!body.empty()) {
+            cgiProcess->input_body = body;
+            cgiProcess->input_written = 0;
+            cgiProcess->stdin_fd = stdin_pipe[1];
+            
+            // Add stdin pipe to epoll for writing the body asynchronously
+            epoll_event stdin_event;
+            stdin_event.events = EPOLLOUT;
+            stdin_event.data.fd = stdin_pipe[1];
+            
+            if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, stdin_pipe[1], &stdin_event) == -1) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to add CGI stdin pipe to epoll");
+                delete cgiProcess;
+                close(stdin_pipe[1]);
+                close(stdout_pipe[0]);
+                kill(pid, SIGTERM);
+                sendErrorResponse(client_fd, 500, server);
+                return;
+            }
+        } else {
+            // No body to write, close stdin immediately
+            close(stdin_pipe[1]);
+            cgiProcess->stdin_fd = -1;
+        }
         
         // Add CGI pipe to epoll for monitoring
         epoll_event event;
@@ -1450,6 +1514,11 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
     
     // CGI process finished (bytesRead == 0) or error occurred
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI process finished, total output: %zu bytes", process->output.length());
+    
+    // Additional debugging for large responses
+    if (process->output.length() > 50000000) { // 50MB+
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Large CGI response detected: %zu bytes", process->output.length());
+    }
     
     // Find the corresponding client
     std::map<int, int>::iterator clientIt = _cgiToClient.find(cgi_fd);
@@ -1524,16 +1593,48 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
             httpResponse += "Content-Type: text/html\r\n";
         }
         
-        httpResponse += "Content-Length: " + sizeToString(responseBody.length()) + "\r\n";
+        // Debug logging for Content-Length calculation
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Response body size: %zu bytes", responseBody.length());
+        
+        // Only add Content-Length if CGI didn't provide it
+        if (responseHeaders.find("Content-Length:") == std::string::npos) {
+            httpResponse += "Content-Length: " + sizeToString(responseBody.length()) + "\r\n";
+        } else {
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI provided Content-Length header, using that");
+        }
+        
         httpResponse += "Connection: close\r\n\r\n";
         httpResponse += responseBody;
         
-        // Send response to client
-        ssize_t sent = send(client_fd, httpResponse.c_str(), httpResponse.length(), 0);
-        if (sent < 0) {
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to send CGI response to client %d", client_fd);
+        // Debug logging for total response size
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Total HTTP response size: %zu bytes (headers + body)", httpResponse.length());
+        
+        // Send response to client in chunks for large responses
+        size_t totalSent = 0;
+        size_t totalSize = httpResponse.length();
+        const size_t chunkSize = 65536; // 64KB chunks
+        
+        while (totalSent < totalSize) {
+            size_t remaining = totalSize - totalSent;
+            size_t toSend = (remaining > chunkSize) ? chunkSize : remaining;
+            
+            ssize_t sent = send(client_fd, httpResponse.c_str() + totalSent, toSend, 0);
+            if (sent <= 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Would block, try again
+                    continue;
+                } else {
+                    Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to send CGI response to client %d: %s", client_fd, strerror(errno));
+                    break;
+                }
+            }
+            totalSent += sent;
+        }
+        
+        if (totalSent == totalSize) {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent complete CGI response to client %d (%zu bytes)", client_fd, totalSent);
         } else {
-            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent CGI response to client %d (%zd bytes)", client_fd, sent);
+            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Partial CGI response sent to client %d (%zu/%zu bytes)", client_fd, totalSent, totalSize);
         }
         
         // Close client connection
@@ -1595,4 +1696,62 @@ void EpollClasse::cleanupCgiProcess(int cgi_fd) {
     if (clientIt != _cgiToClient.end()) {
         _cgiToClient.erase(clientIt);
     }
+}
+
+// Handle writing request body to CGI stdin
+void EpollClasse::handleCgiStdinWrite(int stdin_fd) {
+    // Find the CGI process by stdin_fd
+    CgiProcess* cgiProcess = NULL;
+    for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); 
+         it != _cgiProcesses.end(); ++it) {
+        if (it->second->stdin_fd == stdin_fd) {
+            cgiProcess = it->second;
+            break;
+        }
+    }
+    
+    if (!cgiProcess) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process not found for stdin fd %d", stdin_fd);
+        return;
+    }
+    
+    if (cgiProcess->input_written >= cgiProcess->input_body.length()) {
+        // All data written, close stdin and remove from epoll
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, stdin_fd, NULL);
+        close(stdin_fd);
+        cgiProcess->stdin_fd = -1;
+        return;
+    }
+    
+    // Write chunk of data
+    size_t remaining = cgiProcess->input_body.length() - cgiProcess->input_written;
+    size_t chunkSize = (remaining > 8192) ? 8192 : remaining;
+    
+    ssize_t written = write(stdin_fd, 
+                           cgiProcess->input_body.c_str() + cgiProcess->input_written, 
+                           chunkSize);
+    
+    if (written > 0) {
+        cgiProcess->input_written += written;
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Wrote %zd bytes to CGI stdin (%zu/%zu total)", 
+                      written, cgiProcess->input_written, cgiProcess->input_body.length());
+    } else if (written < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error writing to CGI stdin: %s", strerror(errno));
+            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, stdin_fd, NULL);
+            close(stdin_fd);
+            cgiProcess->stdin_fd = -1;
+        }
+    }
+}
+
+// Check if fd is a CGI stdin file descriptor
+bool EpollClasse::isCgiStdinFd(int fd) {
+    for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); 
+         it != _cgiProcesses.end(); ++it) {
+        if (it->second->stdin_fd == fd) {
+            return true;
+        }
+    }
+    return false;
 }

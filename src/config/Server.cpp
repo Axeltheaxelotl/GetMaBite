@@ -12,6 +12,7 @@
 
 #include"Server.hpp"
 #include<algorithm>
+#include <fnmatch.h>     // for fnmatch
 
 Server::Server() : 
     listen_ports(),
@@ -19,7 +20,7 @@ Server::Server() :
     root(),
     index(),
     error_pages(),
-    client_max_body_size(1048576),
+    client_max_body_size(0),
     locations(),
     cgi_extensions(),
     autoindex(false),
@@ -51,20 +52,40 @@ Location* Server::findLocation(const std::string& path)
 
 const Location* Server::findLocation(const std::string& path) const
 {
-	const Location* bestMatch = NULL;
-	size_t bestMatchLength = 0;
-	for(std::vector<Location>::const_iterator it = locations.begin(); it != locations.end(); ++it)
-	{
-		if(path.find(it->path) == 0)    // Le chemin commence par le chemin de la location
-		{
-			if(it->path.length() > bestMatchLength)
-			{
-				bestMatch = &(*it);
-				bestMatchLength = it->path.length();
-			}
-		}
-	}
-	return bestMatch;
+    const Location* bestMatch      = NULL;
+    size_t          bestSpecificity = 0;
+
+    for (std::vector<Location>::const_iterator it = locations.begin();
+         it != locations.end(); ++it)
+    {
+        const std::string& pattern = it->path;
+        bool doesMatch = false;
+        size_t specificity = 0;
+
+        // If the location contains '*' or '?' use fnmatch()
+        if (pattern.find_first_of("*?") != std::string::npos) {
+            if (fnmatch(pattern.c_str(), path.c_str(), 0) == 0) {
+                doesMatch = true;
+                // Reward non‑wildcard characters
+                specificity = pattern.length()
+                              - std::count(pattern.begin(), pattern.end(), '*')
+                              - std::count(pattern.begin(), pattern.end(), '?');
+            }
+        }
+        // Otherwise fall back to simple prefix match
+        else if (path.compare(0, pattern.length(), pattern) == 0) {
+            doesMatch = true;
+            specificity = pattern.length();
+        }
+
+        // Keep the pattern with the highest “specificity” score
+        if (doesMatch && specificity > bestSpecificity) {
+            bestMatch       = &(*it);
+            bestSpecificity = specificity;
+        }
+    }
+
+    return bestMatch;
 }
 
 std::string Server::getErrorPage(int error_code) const
