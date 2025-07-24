@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cstring>
 #include <sstream>
+#include <iomanip>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -15,6 +16,7 @@
 #include "../http/RequestBufferManager.hpp"
 #include "../config/ServerNameHandler.hpp"
 #include"../cgi/CgiHandler.hpp"
+
 #include <stdexcept> // Pour gestion des erreurs par exceptions
 #include <fnmatch.h>     // for fnmatch
 #include <algorithm>     // for std::count
@@ -96,11 +98,6 @@ EpollClasse::~EpollClasse()
     // Clean up any remaining CGI processes
     for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); it != _cgiProcesses.end(); ++it) {
         CgiProcess* process = it->second;
-        CgiHandler* cgiHandler = static_cast<CgiHandler*>(process->cgiHandler);
-        if (cgiHandler) {
-            cgiHandler->terminateCgi(process);
-            delete cgiHandler;
-        }
         delete process;
     }
     _cgiProcesses.clear();
@@ -441,16 +438,10 @@ void EpollClasse::handleRequest(int client_fd) {
     
     // Check if we have a complete HTTP request
     if (!_bufferManager.isRequestComplete(client_fd)) {
-        // Request not complete, wait for more data
-        size_t currentBufferSize = _bufferManager.getBufferSize(client_fd);
-        if (currentBufferSize < 1000000) { // Only log for smaller buffers to avoid spam
-            Logger::logMsg(LIGHTMAGENTA, CONSOLE_OUTPUT, "[handleRequest] Request not complete for fd %d, waiting more data (%zu bytes so far)", client_fd, currentBufferSize);
-        }
         return;
     }
 
     std::string request = _bufferManager.get(client_fd);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "[handleRequest] Full HTTP request received on fd %d (%zu bytes total)", client_fd, request.length());
     _bufferManager.clear(client_fd);
 
     // Parser la requête HTTP avec validation renforcée
@@ -952,10 +943,81 @@ std::string EpollClasse::parseQueryString(const std::string &request) {
 // Parser le corps de la requête
 std::string EpollClasse::parseBody(const std::string &request) {
     size_t bodyPos = request.find("\r\n\r\n");
-    if (bodyPos != std::string::npos) {
-        return request.substr(bodyPos + 4);
+    if (bodyPos == std::string::npos) {
+        return "";
     }
-    return "";
+    
+    std::string headers = request.substr(0, bodyPos);
+    std::string rawBody = request.substr(bodyPos + 4);
+    
+    // Check if it's chunked encoding
+    if (headers.find("Transfer-Encoding:") != std::string::npos && 
+        headers.find("chunked") != std::string::npos) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "🔍 Detected chunked encoding, decoding...");
+        return decodeChunkedBody(rawBody);
+    }
+    
+    // Regular body (Content-Length)
+    return rawBody;
+}
+
+std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
+    std::string decodedBody;
+    size_t pos = 0;
+    
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📦 Decoding chunked data (%zu bytes raw)", chunkedData.length());
+    
+    while (pos < chunkedData.length()) {
+        // Find the end of the size line
+        size_t sizeEnd = chunkedData.find("\r\n", pos);
+        if (sizeEnd == std::string::npos) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "❌ Invalid chunk: no CRLF after size");
+            break;
+        }
+        
+        // Extract chunk size (in hex)
+        std::string sizeStr = chunkedData.substr(pos, sizeEnd - pos);
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📏 Chunk size string: '%s'", sizeStr.c_str());
+        
+        // Convert hex string to number
+        char* endptr;
+        unsigned long chunkSize = strtoul(sizeStr.c_str(), &endptr, 16);
+        
+        if (*endptr != '\0' && *endptr != ';') {  // Allow chunk extensions after ';'
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "❌ Invalid chunk size: '%s'", sizeStr.c_str());
+            break;
+        }
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📦 Chunk size: %lu bytes", chunkSize);
+        
+        // If chunk size is 0, we've reached the end
+        if (chunkSize == 0) {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "✅ Reached end chunk (size 0)");
+            break;
+        }
+        
+        // Move to start of chunk data (after size + CRLF)
+        pos = sizeEnd + 2;
+        
+        // Check if we have enough data
+        if (pos + chunkSize + 2 > chunkedData.length()) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "❌ Incomplete chunk data");
+            break;
+        }
+        
+        // Extract chunk data
+        std::string chunkData = chunkedData.substr(pos, chunkSize);
+        decodedBody += chunkData;
+        
+        // Move past chunk data and trailing CRLF
+        pos += chunkSize + 2;
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "✅ Decoded chunk: %lu bytes (total so far: %zu bytes)", 
+                      chunkSize, decodedBody.length());
+    }
+    
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "🎉 Chunked decoding complete: %zu bytes total", decodedBody.length());
+    return decodedBody;
 }
 
 // Gestion des requêtes GET
@@ -1000,6 +1062,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
                     return;
                 }
             }
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Directory requested but autoindex is disabled and no index file found: %s", resolvedPath.c_str());
             sendErrorResponse(client_fd, 404, server);
             return;
         }
@@ -1099,6 +1162,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
             sendErrorResponse(client_fd, 500, server);
         }
     } else {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "No upload path configured for POST request");
         sendErrorResponse(client_fd, 404, server);
     }
 }
@@ -1116,6 +1180,7 @@ void EpollClasse::handleDeleteRequest(int client_fd, const std::string &path, co
     std::string resolvedPath = resolvePath(server, path);
     
     if (!fileExists(resolvedPath)) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found for DELETE: %s", resolvedPath.c_str());
         sendErrorResponse(client_fd, 404, server);
         return;
     }
@@ -1135,6 +1200,7 @@ void EpollClasse::handleHeadRequest(int client_fd, const std::string &path, cons
     std::string resolvedPath = resolvePath(server, path);
     
     if (!fileExists(resolvedPath)) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "File not found for HEAD: %s", resolvedPath.c_str());
         sendErrorResponse(client_fd, 404, server);
         return;
     }
@@ -1312,11 +1378,6 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
                                  const std::string &queryString, const std::string &body,
                                  const std::map<std::string, std::string> &headers, const Server &server) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Handling CGI request: %s", scriptPath.c_str());
-    
-    if (!fileExists(scriptPath)) {
-        sendErrorResponse(client_fd, 404, server);
-        return;
-    }
     
     // Create pipes for communication
     int stdin_pipe[2], stdout_pipe[2];
@@ -1501,14 +1562,9 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
     while ((bytesRead = read(cgi_fd, buffer, BUFFER_SIZE - 1)) > 0) {
         process->output.append(buffer, bytesRead);
         dataReceived = true;
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Read %zd bytes from CGI process", bytesRead);
     }
     
     if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        // No more data available for now, but CGI might still be running
-        if (dataReceived) {
-            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "CGI data received, waiting for more or completion");
-        }
         return;
     }
     
@@ -1564,8 +1620,6 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
         
         // Build HTTP response
         std::string httpResponse = "HTTP/1.1 200 OK\r\n";
-        httpResponse += "Date: " + getCurrentDateTime() + "\r\n";
-        httpResponse += "Server: Webserv/1.0\r\n";
         
         // Add CGI headers if present
         if (!responseHeaders.empty()) {
@@ -1576,8 +1630,6 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
                 std::string statusLine = responseHeaders.substr(statusPos + 7, statusEnd - statusPos - 7);
                 // Remove "Status:" and use the status code
                 httpResponse = "HTTP/1.1" + statusLine + "\r\n";
-                httpResponse += "Date: " + getCurrentDateTime() + "\r\n";
-                httpResponse += "Server: Webserv/1.0\r\n";
                 // Remove Status line from headers to avoid duplication
                 responseHeaders.erase(statusPos, statusEnd - statusPos + 1);
             }
@@ -1733,8 +1785,6 @@ void EpollClasse::handleCgiStdinWrite(int stdin_fd) {
     
     if (written > 0) {
         cgiProcess->input_written += written;
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Wrote %zd bytes to CGI stdin (%zu/%zu total)", 
-                      written, cgiProcess->input_written, cgiProcess->input_body.length());
     } else if (written < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error writing to CGI stdin: %s", strerror(errno));

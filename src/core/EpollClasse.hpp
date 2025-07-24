@@ -52,6 +52,7 @@ private:
     std::string parsePath(const std::string &request);
     std::string parseQueryString(const std::string &request);
     std::string parseBody(const std::string &request);
+    std::string decodeChunkedBody(const std::string &chunkedData);
     
     // HTTP methods
     void handleGetRequest(int client_fd, const std::string &path, const Server &server, const std::string &queryString = "");

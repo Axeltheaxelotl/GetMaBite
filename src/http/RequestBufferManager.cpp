@@ -100,7 +100,16 @@ size_t RequestBufferManager::getContentLength(const std::string& buffer) {
     lengthStr.erase(0, lengthStr.find_first_not_of(" \t"));
     lengthStr.erase(lengthStr.find_last_not_of(" \t") + 1);
     
-    return static_cast<size_t>(atoi(lengthStr.c_str()));
+    // Use strtoul for proper size_t parsing instead of atoi
+    char* endptr;
+    unsigned long result = strtoul(lengthStr.c_str(), &endptr, 10);
+    
+    // Check for parsing errors
+    if (*endptr != '\0' || lengthStr.empty()) {
+        return 0; // Invalid number
+    }
+    
+    return static_cast<size_t>(result);
 }
 
 bool RequestBufferManager::isChunkedEncoding(const std::string& buffer) {
