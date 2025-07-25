@@ -103,6 +103,13 @@ EpollClasse::~EpollClasse()
     _cgiProcesses.clear();
     _cgiToClient.clear();
     
+    // Clean up response buffers
+    for (std::map<int, ResponseBuffer*>::iterator it = _responseBuffers.begin(); it != _responseBuffers.end(); ++it) {
+        delete it->second;
+    }
+    _responseBuffers.clear();
+    _clientsInEpollOut.clear();
+    
     if (_epoll_fd != -1)
     {
         close(_epoll_fd);
@@ -169,6 +176,9 @@ void EpollClasse::serverRun() {
                 // Handle CGI stdin writing
                 if (isCgiStdinFd(fd)) {
                     handleCgiStdinWrite(fd);
+                } else {
+                    // Handle client response writing
+                    handleClientWrite(fd);
                 }
             } else if (_events[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) {
                 if (isCgiFd(fd)) {
@@ -179,6 +189,7 @@ void EpollClasse::serverRun() {
                     epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, fd, NULL);
                     timeoutManager.removeClient(fd);
                     _bufferManager.clear(fd);
+                    cleanupClientResponse(fd);
                     close(fd);
                 }
             }
@@ -197,6 +208,7 @@ void EpollClasse::serverRun() {
                 close(*it);
                 timeoutManager.removeClient(*it);
                 _bufferManager.clear(*it);
+                cleanupClientResponse(*it);
             }
         }
         
@@ -752,9 +764,9 @@ for (std::vector<Location>::const_iterator it = server.locations.begin();
     // If it's a CGI request, the connection will be closed when CGI completes
 }
 
-// Fonction utilitaire pour envoyer une réponse
+// Fonction utilitaire pour envoyer une réponse (maintenant non-bloquante)
 void EpollClasse::sendResponse(int client_fd, const std::string& response) {
-    send(client_fd, response.c_str(), response.length(), 0);
+    queueResponse(client_fd, response);
 }
 
 // Fonction pour définir un FD en mode non-bloquant
@@ -1047,7 +1059,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
             AutoIndex autoIndex;
             std::string autoIndexPage = autoIndex.generateAutoIndexPage(resolvedPath);
             std::string response = generateHttpResponse(200, "text/html", autoIndexPage);
-            send(client_fd, response.c_str(), response.length(), 0);
+            queueResponse(client_fd, response);
             return;
         } else {
             // Try to serve index file if autoindex is disabled
@@ -1058,7 +1070,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
                     std::string content = readFile(indexPath);
                     std::string mimeType = getMimeType(indexPath);
                     std::string response = generateHttpResponse(200, mimeType, content);
-                    send(client_fd, response.c_str(), response.length(), 0);
+                    queueResponse(client_fd, response);
                     return;
                 }
             }
@@ -1085,7 +1097,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     
     std::string mimeType = getMimeType(resolvedPath);
     std::string response = generateHttpResponse(200, mimeType, content);
-    send(client_fd, response.c_str(), response.length(), 0);
+    queueResponse(client_fd, response);
 }
 
 // Gestion des requêtes POST
@@ -1141,7 +1153,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
             
             Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Large POST body written to %s (%zu bytes)", uploadPath.c_str(), body.length());
             std::string response = generateHttpResponse(201, "text/plain", "File uploaded successfully");
-            send(client_fd, response.c_str(), response.length(), 0);
+            queueResponse(client_fd, response);
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to write POST body to %s", uploadPath.c_str());
             sendErrorResponse(client_fd, 500, server);
@@ -1156,7 +1168,7 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
             
             Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Large POST body written to %s (%zu bytes)", uploadPath.c_str(), body.length());
             std::string response = generateHttpResponse(201, "text/plain", "File uploaded successfully");
-            send(client_fd, response.c_str(), response.length(), 0);
+            queueResponse(client_fd, response);
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to write POST body to %s", uploadPath.c_str());
             sendErrorResponse(client_fd, 500, server);
@@ -1187,7 +1199,7 @@ void EpollClasse::handleDeleteRequest(int client_fd, const std::string &path, co
     
     if (remove(resolvedPath.c_str()) == 0) {
         std::string response = generateHttpResponse(204, "text/plain", "");
-        send(client_fd, response.c_str(), response.length(), 0);
+        queueResponse(client_fd, response);
     } else {
         sendErrorResponse(client_fd, 500, server);
     }
@@ -1215,7 +1227,7 @@ void EpollClasse::handleHeadRequest(int client_fd, const std::string &path, cons
         response = response.substr(0, bodyPos + 4);
     }
     
-    send(client_fd, response.c_str(), response.length(), 0);
+    queueResponse(client_fd, response);
 }
 
 // Gestion des erreurs HTTP
@@ -1237,7 +1249,7 @@ void EpollClasse::sendErrorResponse(int client_fd, int errorCode, const Server &
     }
     
     std::string response = generateHttpResponse(errorCode, "text/html", content);
-    send(client_fd, response.c_str(), response.length(), 0);
+    queueResponse(client_fd, response);
     
     Logger::logMsg(RED, CONSOLE_OUTPUT, "Sent error response %d to client %d", errorCode, client_fd);
 }
@@ -1330,7 +1342,7 @@ void EpollClasse::handleFileUpload(int client_fd, const std::string &body,
     if (uploadSuccess) {
         std::string response = generateHttpResponse(201, "text/html", 
             "<html><body><h1>Upload successful!</h1></body></html>");
-        send(client_fd, response.c_str(), response.length(), 0);
+        queueResponse(client_fd, response);
     } else {
         sendErrorResponse(client_fd, 500, server);
     }
@@ -1581,19 +1593,22 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
     if (clientIt != _cgiToClient.end()) {
         int client_fd = clientIt->second;
         
-        // Wait for the child process to complete
+        // Check for the child process completion (non-blocking)
         int status;
         pid_t result = waitpid(process->pid, &status, WNOHANG);
-        if (result == 0) {
-            // Process still running, wait a bit more
-            usleep(10000); // 10ms
-            result = waitpid(process->pid, &status, WNOHANG);
-        }
         
         if (result > 0) {
             // Process completed
+            process->finished = true;
+            process->exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
             if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
                 Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process exited with status %d", WEXITSTATUS(status));
+            }
+        } else if (result == 0) {
+            // Process still running, check if we have EOF on pipe
+            if (bytesRead == 0) {
+                // EOF received but process still running, continue monitoring
+                return;
             }
         }
         
@@ -1661,39 +1676,10 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
         // Debug logging for total response size
         Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Total HTTP response size: %zu bytes (headers + body)", httpResponse.length());
         
-        // Send response to client in chunks for large responses
-        size_t totalSent = 0;
-        size_t totalSize = httpResponse.length();
-        const size_t chunkSize = 65536; // 64KB chunks
+        // Queue response for non-blocking sending
+        queueResponse(client_fd, httpResponse);
         
-        while (totalSent < totalSize) {
-            size_t remaining = totalSize - totalSent;
-            size_t toSend = (remaining > chunkSize) ? chunkSize : remaining;
-            
-            ssize_t sent = send(client_fd, httpResponse.c_str() + totalSent, toSend, 0);
-            if (sent <= 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Would block, try again
-                    continue;
-                } else {
-                    Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to send CGI response to client %d: %s", client_fd, strerror(errno));
-                    break;
-                }
-            }
-            totalSent += sent;
-        }
-        
-        if (totalSent == totalSize) {
-            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent complete CGI response to client %d (%zu bytes)", client_fd, totalSent);
-        } else {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Partial CGI response sent to client %d (%zu/%zu bytes)", client_fd, totalSent, totalSize);
-        }
-        
-        // Close client connection
-        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
-        timeoutManager.removeClient(client_fd);
-        _bufferManager.clear(client_fd);
-        close(client_fd);
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Queued CGI response for client %d (%zu bytes)", client_fd, httpResponse.length());
     }
     
     // Clean up CGI process
@@ -1722,14 +1708,19 @@ void EpollClasse::cleanupCgiProcess(int cgi_fd) {
             if (result == 0) {
                 // Process still running, try to terminate
                 kill(process->pid, SIGTERM);
-                usleep(100000); // Wait 100ms
-                result = waitpid(process->pid, &status, WNOHANG);
+                // Give it a chance to terminate gracefully
+                for (int i = 0; i < 10; ++i) {
+                    result = waitpid(process->pid, &status, WNOHANG);
+                    if (result != 0) break;
+                    // Short non-blocking check, don't use usleep
+                }
                 
                 if (result == 0) {
                     // Still running, force kill
                     Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Force killing CGI process %d", process->pid);
                     kill(process->pid, SIGKILL);
-                    waitpid(process->pid, &status, 0); // Wait for it to die
+                    // Try non-blocking wait, if it fails the signal handler will clean it up
+                    waitpid(process->pid, &status, WNOHANG);
                 }
             }
             
@@ -1804,4 +1795,139 @@ bool EpollClasse::isCgiStdinFd(int fd) {
         }
     }
     return false;
+}
+
+// Queue response for non-blocking sending
+void EpollClasse::queueResponse(int client_fd, const std::string& response) {
+    ResponseBuffer* buffer = _responseBuffers[client_fd];
+    if (!buffer) {
+        buffer = new ResponseBuffer();
+        _responseBuffers[client_fd] = buffer;
+    }
+    
+    // Append to existing buffer if any
+    buffer->data += response;
+    buffer->isComplete = true;
+    
+    // Try to send immediately first
+    size_t remaining = buffer->data.length() - buffer->sent;
+    if (remaining > 0) {
+        size_t chunkSize = (remaining > 65536) ? 65536 : remaining; // 64KB chunks max
+        ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, MSG_NOSIGNAL);
+        
+        if (sent > 0) {
+            buffer->sent += sent;
+        }
+        
+        // If we couldn't send everything, add to epoll for writing
+        if (buffer->sent < buffer->data.length()) {
+            addClientToEpollOut(client_fd);
+        } else {
+            // All data sent immediately, close connection
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent complete response to client %d (%zu bytes)", 
+                          client_fd, buffer->sent);
+            
+            // Close client connection
+            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+            timeoutManager.removeClient(client_fd);
+            _bufferManager.clear(client_fd);
+            cleanupClientResponse(client_fd);
+            close(client_fd);
+        }
+    }
+}
+
+// Handle non-blocking client writing
+void EpollClasse::handleClientWrite(int client_fd) {
+    std::map<int, ResponseBuffer*>::iterator bufferIt = _responseBuffers.find(client_fd);
+    if (bufferIt == _responseBuffers.end()) {
+        // No buffer found, remove from epoll out
+        removeClientFromEpollOut(client_fd);
+        return;
+    }
+    
+    ResponseBuffer* buffer = bufferIt->second;
+    if (buffer->sent >= buffer->data.length()) {
+        // All data sent, clean up and close connection
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent complete response to client %d (%zu bytes)", 
+                      client_fd, buffer->sent);
+        
+        // Close client connection
+        epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+        timeoutManager.removeClient(client_fd);
+        _bufferManager.clear(client_fd);
+        cleanupClientResponse(client_fd);
+        close(client_fd);
+        return;
+    }
+    
+    // Send as much data as possible
+    size_t remaining = buffer->data.length() - buffer->sent;
+    size_t chunkSize = (remaining > 65536) ? 65536 : remaining; // 64KB chunks max
+    
+    ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, MSG_NOSIGNAL);
+    
+    if (sent > 0) {
+        buffer->sent += sent;
+    } else if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // Would block, will try again when epoll signals ready
+            return;
+        } else {
+            // Error occurred, close connection
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error sending to client %d: %s", client_fd, strerror(errno));
+            epoll_ctl(_epoll_fd, EPOLL_CTL_DEL, client_fd, NULL);
+            timeoutManager.removeClient(client_fd);
+            _bufferManager.clear(client_fd);
+            cleanupClientResponse(client_fd);
+            close(client_fd);
+        }
+    }
+}
+
+// Add client to epoll for writing
+void EpollClasse::addClientToEpollOut(int client_fd) {
+    if (_clientsInEpollOut.find(client_fd) != _clientsInEpollOut.end()) {
+        return; // Already added
+    }
+    
+    epoll_event event;
+    event.events = EPOLLIN | EPOLLOUT; // Level-triggered for both read and write
+    event.data.fd = client_fd;
+    
+    if (epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, client_fd, &event) == -1) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to modify client %d to epoll for writing: %s", client_fd, strerror(errno));
+        return;
+    }
+    
+    _clientsInEpollOut[client_fd] = true;
+}
+
+// Remove client from epoll writing
+void EpollClasse::removeClientFromEpollOut(int client_fd) {
+    std::map<int, bool>::iterator it = _clientsInEpollOut.find(client_fd);
+    if (it == _clientsInEpollOut.end()) {
+        return; // Not in epoll out
+    }
+    
+    epoll_event event;
+    event.events = EPOLLIN; // Back to read-only mode
+    event.data.fd = client_fd;
+    
+    epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, client_fd, &event);
+    _clientsInEpollOut.erase(it);
+}
+
+// Clean up client response buffer
+void EpollClasse::cleanupClientResponse(int client_fd) {
+    std::map<int, ResponseBuffer*>::iterator bufferIt = _responseBuffers.find(client_fd);
+    if (bufferIt != _responseBuffers.end()) {
+        delete bufferIt->second;
+        _responseBuffers.erase(bufferIt);
+    }
+    
+    std::map<int, bool>::iterator epollIt = _clientsInEpollOut.find(client_fd);
+    if (epollIt != _clientsInEpollOut.end()) {
+        _clientsInEpollOut.erase(epollIt);
+    }
 }

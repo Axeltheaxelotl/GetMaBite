@@ -18,8 +18,9 @@
 
 #define MAX_EVENTS 100
 
-// Forward declaration - structure définie dans CgiHandler.hpp
+// Forward declarations
 struct CgiProcess;
+struct ResponseBuffer;
 
 class EpollClasse {
 private:
@@ -33,6 +34,10 @@ private:
     // CGI management
     std::map<int, CgiProcess*> _cgiProcesses;
     std::map<int, int> _cgiToClient;
+    
+    // Response buffering for non-blocking sends
+    std::map<int, ResponseBuffer*> _responseBuffers;
+    std::map<int, bool> _clientsInEpollOut;
     
     // Méthodes privées
     void setNonBlocking(int fd);
@@ -73,6 +78,13 @@ private:
     void handleCgiStdinWrite(int stdin_fd);
     void cleanupCgiProcess(int cgi_fd);
     bool isCgiStdinFd(int fd);
+    
+    // Response buffering for non-blocking sends
+    void queueResponse(int client_fd, const std::string& response);
+    void handleClientWrite(int client_fd);
+    void addClientToEpollOut(int client_fd);
+    void removeClientFromEpollOut(int client_fd);
+    void cleanupClientResponse(int client_fd);
     
     // File upload handling
     void handleFileUpload(int client_fd, const std::string &body, 
