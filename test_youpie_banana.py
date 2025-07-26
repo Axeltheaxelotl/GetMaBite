@@ -1,1 +1,0 @@
-print("Run ./webserv ./youpi_test/youpi.conf then run ./youpi_test/ubuntu_tester http://0.0.0.0:8000")
