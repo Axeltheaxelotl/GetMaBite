@@ -8,7 +8,14 @@ RequestBufferManager::RequestBufferManager() {}
 RequestBufferManager::~RequestBufferManager() {}
 
 void RequestBufferManager::append(int client_fd, const std::string& data) {
-    _buffers[client_fd] += data;
+    std::string& buffer = _buffers[client_fd];
+    // More conservative memory reservation to reduce memset overhead
+    if (buffer.capacity() < buffer.size() + data.size() + 1024) {
+        buffer.reserve(buffer.size() + data.size() + 16384); // Reserve extra 16KB instead of 64KB
+    }
+    buffer += data;
+    // Invalidate cache when new data arrives
+    invalidateCache(client_fd);
 }
 
 std::string RequestBufferManager::get(int client_fd) {
@@ -19,8 +26,20 @@ std::string RequestBufferManager::get(int client_fd) {
     return "";
 }
 
+void RequestBufferManager::append(int fd, const char* data, size_t len) {
+    std::string& buffer = _buffers[fd];
+    // More conservative memory reservation to reduce memset overhead
+    if (buffer.capacity() < buffer.size() + len + 1024) {
+        buffer.reserve(buffer.size() + len + 16384); // Reserve extra 16KB instead of 64KB
+    }
+    buffer.append(data, len);
+    // Invalidate cache when new data arrives
+    invalidateCache(fd);
+}
+
 void RequestBufferManager::clear(int client_fd) {
     _buffers.erase(client_fd);
+    _parseCache.erase(client_fd);
 }
 
 bool RequestBufferManager::isRequestComplete(int client_fd) {
@@ -30,42 +49,57 @@ bool RequestBufferManager::isRequestComplete(int client_fd) {
     }
     
     const std::string& buffer = it->second;
+    RequestParseCache& cache = _parseCache[client_fd];
     
-    // Vérifier si on a les headers complets
-    if (!hasCompleteHeaders(buffer)) {
-        return false;
-    }
-    
-    // Vérifier si c'est du chunked encoding
-    if (isChunkedEncoding(buffer)) {
-        return isChunkedComplete(buffer);
-    }
-    
-    // Vérifier avec Content-Length
-    size_t contentLength = getContentLength(buffer);
-    size_t headerEnd = buffer.find("\r\n\r\n");
-    if (headerEnd == std::string::npos) {
-        return false;
-    }
-    
-    size_t bodyStart = headerEnd + 4;
-    size_t currentBodyLength = (buffer.length() > bodyStart) ? buffer.length() - bodyStart : 0;
-    
-    // Si pas de Content-Length, considérer que la requête est complète après les headers
-    if (contentLength == 0) {
+    // If already marked complete, return immediately
+    if (cache.isComplete) {
         return true;
     }
     
-    // Amélioration pour les gros corps: plus robuste et précis
-    bool complete = currentBodyLength >= contentLength;
-    
-    // Debug pour les gros corps (>1MB)
-    if (contentLength > 1000000 && complete) {
-        std::cout << "[DEBUG] Large body complete: expected=" << contentLength 
-                  << ", received=" << currentBodyLength << std::endl;
+    // If buffer hasn't grown since last parse and we already parsed, return cached result
+    if (buffer.length() == cache.lastParsedSize && cache.lastParsedSize > 0) {
+        return cache.isComplete;
     }
     
-    return complete;
+    // Update last parsed size
+    cache.lastParsedSize = buffer.length();
+    
+    // Check headers only if not already complete
+    if (!cache.headersComplete) {
+        cache.headersComplete = hasCompleteHeaders(buffer);
+        if (!cache.headersComplete) {
+            return false;
+        }
+        
+        // Parse encoding type and content length only once
+        cache.isChunked = isChunkedEncoding(buffer);
+        if (!cache.isChunked) {
+            cache.contentLength = getContentLength(buffer);
+        }
+    }
+    
+    // Check completion based on encoding type
+    if (cache.isChunked) {
+        cache.isComplete = isChunkedComplete(buffer);
+    } else {
+        // Content-Length based completion
+        size_t headerEnd = buffer.find("\r\n\r\n");
+        if (headerEnd == std::string::npos) {
+            return false;
+        }
+        
+        size_t bodyStart = headerEnd + 4;
+        size_t currentBodyLength = (buffer.length() > bodyStart) ? buffer.length() - bodyStart : 0;
+        
+        // If no Content-Length, consider complete after headers
+        if (cache.contentLength == 0) {
+            cache.isComplete = true;
+        } else {
+            cache.isComplete = currentBodyLength >= cache.contentLength;
+        }
+    }
+    
+    return cache.isComplete;
 }
 
 size_t RequestBufferManager::getBufferSize(int client_fd) {
@@ -131,6 +165,28 @@ bool RequestBufferManager::isChunkedEncoding(const std::string& buffer) {
 }
 
 bool RequestBufferManager::isChunkedComplete(const std::string& buffer) {
-    // Pour les chunks, on cherche la fin marquée par "0\r\n\r\n"
-    return buffer.find("0\r\n\r\n") != std::string::npos;
+    // Optimize: Only search the last 10 bytes for chunk terminator
+    // since "0\r\n\r\n" is only 5 bytes long
+    if (buffer.length() < 5) {
+        return false;
+    }
+    
+    size_t searchStart = (buffer.length() > 20) ? buffer.length() - 20 : 0;
+    size_t pos = buffer.find("0\r\n\r\n", searchStart);
+    return pos != std::string::npos;
+}
+
+void RequestBufferManager::invalidateCache(int client_fd) {
+    std::map<int, RequestParseCache>::iterator it = _parseCache.find(client_fd);
+    if (it != _parseCache.end()) {
+        // Only reset completion status, keep parsed headers info if still valid
+        RequestParseCache& cache = it->second;
+        if (!cache.headersComplete) {
+            // Headers not complete yet, reset everything
+            cache = RequestParseCache();
+        } else {
+            // Headers are complete, only reset completion flag
+            cache.isComplete = false;
+        }
+    }
 }

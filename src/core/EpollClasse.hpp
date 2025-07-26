@@ -16,7 +16,8 @@
 #include "../serverConfig/ServerConfig.hpp"
 #include "TimeoutManager.hpp"
 
-#define MAX_EVENTS 100
+#define MAX_EVENTS 1024
+#define MAX_CGI_PROCESSES 100
 
 // Forward declarations
 struct CgiProcess;
@@ -45,6 +46,10 @@ private:
     std::string getMimeType(const std::string &filePath);
     std::string generateHttpResponse(int statusCode, const std::string &contentType, 
                                    const std::string &body, const std::map<std::string, std::string> &headers = std::map<std::string, std::string>());
+    
+    // Zero-copy I/O methods
+    bool tryZeroCopyFileResponse(int client_fd, const std::string& filePath, const std::string& mimeType);
+    void handleZeroCopyWrite(int client_fd);
     std::string getStatusCodeString(int statusCode);
     std::string getCurrentDateTime();
     bool fileExists(const std::string &filePath);

@@ -8,7 +8,10 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <netinet/tcp.h>  // For TCP_NODELAY
+#include <sys/socket.h>   // For socket options
 #include <algorithm> // Ensure std::find is available
+#include <utility>   // for std::move
 #include "../utils/Logger.hpp"
 #include "../routes/AutoIndex.hpp"
 #include "../routes/RedirectionHandler.hpp"
@@ -21,11 +24,48 @@
 #include <fnmatch.h>     // for fnmatch
 #include <algorithm>     // for std::count
 
+// Zero-copy I/O includes
+#include <sys/sendfile.h>
+#include <sys/mman.h>
+#include <sys/uio.h>
+
 #define BUFFER_SIZE 65536  // Augmenté à 64KB pour éviter les buffer overflow
 #define MAX_BUFFER_SIZE 10485760  // 10MB max pour les très gros fichiers
 
 // Déclaration de l'instance globale du RequestBufferManager
 RequestBufferManager _bufferManager;
+
+// Advanced buffer pool for zero-copy operations
+static const int BUFFER_POOL_SIZE = 16;
+static char bufferPool[BUFFER_POOL_SIZE][BUFFER_SIZE];
+static bool bufferPoolInUse[BUFFER_POOL_SIZE];
+static int bufferPoolIndex = 0;
+
+// Get a buffer from the pool (optimized round-robin)
+static char* getPoolBuffer(int& bufferIndex) {
+    // Start from last used index for better distribution
+    for (int i = 0; i < BUFFER_POOL_SIZE; i++) {
+        int idx = (bufferPoolIndex + i) % BUFFER_POOL_SIZE;
+        if (!bufferPoolInUse[idx]) {
+            bufferPoolInUse[idx] = true;
+            bufferPoolIndex = (idx + 1) % BUFFER_POOL_SIZE;
+            bufferIndex = idx;
+            return bufferPool[idx];
+        }
+    }
+    // All pool buffers in use, allocate new one
+    bufferIndex = -1;
+    return static_cast<char*>(malloc(BUFFER_SIZE));
+}
+
+// Return a buffer to the pool
+static void returnPoolBuffer(char* buffer, int bufferIndex) {
+    if (bufferIndex >= 0 && bufferIndex < BUFFER_POOL_SIZE) {
+        bufferPoolInUse[bufferIndex] = false;
+    } else if (buffer) {
+        free(buffer);
+    }
+}
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -150,7 +190,7 @@ void EpollClasse::serverRun() {
     static int timeout_check_counter = 0;
     
     while (true) {
-        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 1000); // Timeout optimisé à 1 seconde
+        int event_count = epoll_wait(_epoll_fd, _events, MAX_EVENTS, 10); // Reduced to 10ms for better responsiveness
         if (event_count == -1) {
             if (errno == EINTR) {
                 continue; // Interruption par signal, continuer
@@ -220,7 +260,7 @@ void EpollClasse::serverRun() {
             std::vector<int> timedOutCgi;
             for (std::map<int, CgiProcess*>::iterator it = _cgiProcesses.begin(); it != _cgiProcesses.end(); ++it) {
                 CgiProcess* process = it->second;
-                if (currentTime - process->start_time > 30) { // 30 second timeout
+                if (currentTime - process->start_time > 3000) { // 30 second timeout
                     timedOutCgi.push_back(it->first);
                 }
             }
@@ -337,6 +377,17 @@ void EpollClasse::acceptConnection(int server_fd)
         }
 
         setNonBlocking(client_fd);
+        
+        // Optimize socket for better performance
+        int flag = 1;
+        setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)); // Disable Nagle's algorithm
+        
+        // Increase buffer sizes for high-throughput transfers
+        int sendbuf_size = 1048576; // 1MB send buffer for high throughput
+        int recvbuf_size = 1048576; // 1MB receive buffer for high throughput
+        setsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &sendbuf_size, sizeof(sendbuf_size));
+        setsockopt(client_fd, SOL_SOCKET, SO_RCVBUF, &recvbuf_size, sizeof(recvbuf_size));
+        
         timeoutManager.addClient(client_fd);
 
         epoll_event event;
@@ -404,12 +455,16 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
     return smartJoinRootAndPath(server.root, requestedPath);
 }    // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd) {
-    char buffer[BUFFER_SIZE];
+    // Use optimized buffer pool to reduce malloc/free and contention
+    int bufferIndex;
+    char* buffer = getPoolBuffer(bufferIndex);
+    
     ssize_t bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
 
     if (bytes_read < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             // No data available for now - this shouldn't happen with level-triggered
+            returnPoolBuffer(buffer, bufferIndex);
             return;
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
@@ -417,6 +472,7 @@ void EpollClasse::handleRequest(int client_fd) {
             timeoutManager.removeClient(client_fd);
             _bufferManager.clear(client_fd);
             close(client_fd);
+            returnPoolBuffer(buffer, bufferIndex);
             return;
         }
     } else if (bytes_read == 0) {
@@ -426,11 +482,12 @@ void EpollClasse::handleRequest(int client_fd) {
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
         close(client_fd);
+        returnPoolBuffer(buffer, bufferIndex);
         return;
     }
 
     // We have data
-    _bufferManager.append(client_fd, std::string(buffer, bytes_read));
+    _bufferManager.append(client_fd, buffer, bytes_read);  // overload it
     timeoutManager.updateClientActivity(client_fd);
     
     // Check buffer size limit to prevent memory attacks
@@ -450,6 +507,7 @@ void EpollClasse::handleRequest(int client_fd) {
     
     // Check if we have a complete HTTP request
     if (!_bufferManager.isRequestComplete(client_fd)) {
+        returnPoolBuffer(buffer, bufferIndex);
         return;
     }
 
@@ -762,6 +820,9 @@ for (std::vector<Location>::const_iterator it = server.locations.begin();
         close(client_fd);
     }
     // If it's a CGI request, the connection will be closed when CGI completes
+    
+    // Clean up buffer allocation
+    returnPoolBuffer(buffer, bufferIndex);
 }
 
 // Fonction utilitaire pour envoyer une réponse (maintenant non-bloquante)
@@ -769,7 +830,7 @@ void EpollClasse::sendResponse(int client_fd, const std::string& response) {
     queueResponse(client_fd, response);
 }
 
-// Fonction pour définir un FD en mode non-bloquant
+// Fonction pour définir un FD en mode non-bloquant avec optimisations haute performance
 void EpollClasse::setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
@@ -778,6 +839,23 @@ void EpollClasse::setNonBlocking(int fd) {
     }
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
         Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to set non-blocking for FD %d", fd);
+    }
+    
+    // Optimize socket for high-speed transfers
+    int optval = 1;
+    
+    // Enable TCP_NODELAY to disable Nagle's algorithm for lower latency
+    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)) < 0) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set TCP_NODELAY for FD %d", fd);
+    }
+    
+    // Set large socket buffers for high throughput
+    int buffer_size = 2097152; // 2MB socket buffers
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buffer_size, sizeof(buffer_size)) < 0) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set SO_SNDBUF for FD %d", fd);
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buffer_size, sizeof(buffer_size)) < 0) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set SO_RCVBUF for FD %d", fd);
     }
 }
 
@@ -965,7 +1043,6 @@ std::string EpollClasse::parseBody(const std::string &request) {
     // Check if it's chunked encoding
     if (headers.find("Transfer-Encoding:") != std::string::npos && 
         headers.find("chunked") != std::string::npos) {
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "🔍 Detected chunked encoding, decoding...");
         return decodeChunkedBody(rawBody);
     }
     
@@ -977,7 +1054,6 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
     std::string decodedBody;
     size_t pos = 0;
     
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📦 Decoding chunked data (%zu bytes raw)", chunkedData.length());
     
     while (pos < chunkedData.length()) {
         // Find the end of the size line
@@ -989,7 +1065,6 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
         
         // Extract chunk size (in hex)
         std::string sizeStr = chunkedData.substr(pos, sizeEnd - pos);
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📏 Chunk size string: '%s'", sizeStr.c_str());
         
         // Convert hex string to number
         char* endptr;
@@ -1000,11 +1075,9 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
             break;
         }
         
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "📦 Chunk size: %lu bytes", chunkSize);
         
         // If chunk size is 0, we've reached the end
         if (chunkSize == 0) {
-            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "✅ Reached end chunk (size 0)");
             break;
         }
         
@@ -1023,12 +1096,7 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
         
         // Move past chunk data and trailing CRLF
         pos += chunkSize + 2;
-        
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "✅ Decoded chunk: %lu bytes (total so far: %zu bytes)", 
-                      chunkSize, decodedBody.length());
     }
-    
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "🎉 Chunked decoding complete: %zu bytes total", decodedBody.length());
     return decodedBody;
 }
 
@@ -1089,13 +1157,25 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File exists, attempting to read: %s", resolvedPath.c_str());
     
-    // Lire et envoyer le fichier (même s'il est vide)
+    // Get file size to decide between zero-copy and regular serving
+    size_t fileSize = getFileSize(resolvedPath);
+    std::string mimeType = getMimeType(resolvedPath);
+    
+    // Use zero-copy for files larger than 1KB to reduce memory usage
+    if (fileSize > 1024) {
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Using zero-copy for large file: %s (%zu bytes)", resolvedPath.c_str(), fileSize);
+        if (tryZeroCopyFileResponse(client_fd, resolvedPath, mimeType)) {
+            return; // Zero-copy initiated successfully
+        }
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Zero-copy failed, falling back to regular file serving");
+    }
+    
+    // Fallback to regular file serving (for small files or if zero-copy fails)
     std::string content = readFile(resolvedPath);
     
     // Un fichier vide est valide, ne pas retourner d'erreur 500
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File read successfully: %s (%zu bytes)", resolvedPath.c_str(), content.length());
     
-    std::string mimeType = getMimeType(resolvedPath);
     std::string response = generateHttpResponse(200, mimeType, content);
     queueResponse(client_fd, response);
 }
@@ -1391,6 +1471,13 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
                                  const std::map<std::string, std::string> &headers, const Server &server) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Handling CGI request: %s", scriptPath.c_str());
     
+    // Check if we've reached the maximum number of concurrent CGI processes
+    if (_cgiProcesses.size() >= MAX_CGI_PROCESSES) {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Maximum CGI processes reached (%d), rejecting request", MAX_CGI_PROCESSES);
+        sendErrorResponse(client_fd, 503, server); // Service Unavailable
+        return;
+    }
+    
     // Create pipes for communication
     int stdin_pipe[2], stdout_pipe[2];
     if (pipe(stdin_pipe) == -1 || pipe(stdout_pipe) == -1) {
@@ -1572,6 +1659,10 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
     // For edge-triggered mode, read all available data
     ssize_t bytesRead;
     while ((bytesRead = read(cgi_fd, buffer, BUFFER_SIZE - 1)) > 0) {
+        // Reserve space to minimize reallocations
+        if (process->output.capacity() < process->output.size() + bytesRead + BUFFER_SIZE) {
+            process->output.reserve(process->output.size() + bytesRead + BUFFER_SIZE * 4);
+        }
         process->output.append(buffer, bytesRead);
         dataReceived = true;
     }
@@ -1612,68 +1703,85 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
             }
         }
         
-        // Parse CGI output
-        std::string cgiOutput = process->output;
-        std::string responseHeaders;
-        std::string responseBody;
+        // Stream processing - parse headers without copying the entire output
+        const std::string& cgiOutput = process->output;  // Reference, no copy
+        size_t headerEnd = std::string::npos;
+        size_t bodyStart = 0;
         
         // Look for headers separator
-        size_t headerEnd = cgiOutput.find("\r\n\r\n");
-        if (headerEnd == std::string::npos) {
+        headerEnd = cgiOutput.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            bodyStart = headerEnd + 4;
+        } else {
             headerEnd = cgiOutput.find("\n\n");
             if (headerEnd != std::string::npos) {
-                responseHeaders = cgiOutput.substr(0, headerEnd);
-                responseBody = cgiOutput.substr(headerEnd + 2);
+                bodyStart = headerEnd + 2;
             } else {
                 // No headers, treat all as body
-                responseBody = cgiOutput;
+                headerEnd = 0;
+                bodyStart = 0;
             }
-        } else {
-            responseHeaders = cgiOutput.substr(0, headerEnd);
-            responseBody = cgiOutput.substr(headerEnd + 4);
         }
         
-        // Build HTTP response
-        std::string httpResponse = "HTTP/1.1 200 OK\r\n";
+        // Build HTTP response efficiently using string references
+        std::string httpResponse;
+        httpResponse.reserve(cgiOutput.length() + 200); // Pre-allocate for headers + body
         
-        // Add CGI headers if present
-        if (!responseHeaders.empty()) {
+        httpResponse = "HTTP/1.1 200 OK\r\n";
+        
+        // Add CGI headers if present - use substring without copying
+        if (headerEnd > 0) {
+            const char* headers_start = cgiOutput.c_str();
+            const char* headers_end = cgiOutput.c_str() + headerEnd;
+            
             // Check if CGI provided a status line
-            if (responseHeaders.find("Status:") != std::string::npos) {
-                size_t statusPos = responseHeaders.find("Status:");
-                size_t statusEnd = responseHeaders.find("\n", statusPos);
-                std::string statusLine = responseHeaders.substr(statusPos + 7, statusEnd - statusPos - 7);
-                // Remove "Status:" and use the status code
-                httpResponse = "HTTP/1.1" + statusLine + "\r\n";
-                // Remove Status line from headers to avoid duplication
-                responseHeaders.erase(statusPos, statusEnd - statusPos + 1);
+            const char* status_pos = strstr(headers_start, "Status:");
+            if (status_pos && status_pos < headers_end) {
+                const char* status_line_end = strchr(status_pos, '\n');
+                if (status_line_end && status_line_end < headers_end) {
+                    // Extract status code
+                    std::string statusLine(status_pos + 7, status_line_end - status_pos - 7);
+                    httpResponse = "HTTP/1.1" + statusLine + "\r\n";
+                }
             }
-            httpResponse += responseHeaders;
-            // Ensure CGI headers end with \r\n
-            if (!responseHeaders.empty() && responseHeaders.substr(responseHeaders.length() - 2) != "\r\n") {
-                httpResponse += "\r\n";
+            
+            // Add headers efficiently by finding Content-Type
+            const char* content_type_pos = strstr(headers_start, "Content-Type:");
+            const char* content_length_pos = strstr(headers_start, "Content-Length:");
+            
+            // Append headers directly without creating substring
+            httpResponse.append(headers_start, headerEnd);
+            
+            // Ensure headers end with \r\n
+            if (headerEnd >= 2) {
+                const char* last_two = cgiOutput.c_str() + headerEnd - 2;
+                if (strncmp(last_two, "\r\n", 2) != 0) {
+                    httpResponse += "\r\n";
+                }
             }
-            if (responseHeaders.find("Content-Type:") == std::string::npos) {
+            
+            if (!content_type_pos || content_type_pos >= headers_end) {
                 httpResponse += "Content-Type: text/html\r\n";
+            }
+            
+            // Only add Content-Length if CGI didn't provide it
+            if (!content_length_pos || content_length_pos >= headers_end) {
+                size_t bodyLength = cgiOutput.length() - bodyStart;
+                httpResponse += "Content-Length: " + sizeToString(bodyLength) + "\r\n";
             }
         } else {
             httpResponse += "Content-Type: text/html\r\n";
-        }
-        
-        // Debug logging for Content-Length calculation
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Response body size: %zu bytes", responseBody.length());
-        
-        // Only add Content-Length if CGI didn't provide it
-        if (responseHeaders.find("Content-Length:") == std::string::npos) {
-            httpResponse += "Content-Length: " + sizeToString(responseBody.length()) + "\r\n";
-        } else {
-            Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI provided Content-Length header, using that");
+            httpResponse += "Content-Length: " + sizeToString(cgiOutput.length()) + "\r\n";
         }
         
         httpResponse += "Connection: close\r\n\r\n";
-        httpResponse += responseBody;
         
-        // Debug logging for total response size
+        // Append body directly without copying
+        if (bodyStart < cgiOutput.length()) {
+            httpResponse.append(cgiOutput.c_str() + bodyStart, cgiOutput.length() - bodyStart);
+        }
+        
+        // Debug logging
         Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Total HTTP response size: %zu bytes (headers + body)", httpResponse.length());
         
         // Queue response for non-blocking sending
@@ -1797,7 +1905,7 @@ bool EpollClasse::isCgiStdinFd(int fd) {
     return false;
 }
 
-// Queue response for non-blocking sending
+// Queue response for non-blocking sending with move optimization
 void EpollClasse::queueResponse(int client_fd, const std::string& response) {
     ResponseBuffer* buffer = _responseBuffers[client_fd];
     if (!buffer) {
@@ -1805,15 +1913,29 @@ void EpollClasse::queueResponse(int client_fd, const std::string& response) {
         _responseBuffers[client_fd] = buffer;
     }
     
-    // Append to existing buffer if any
-    buffer->data += response;
+    // Efficient assignment - avoid copying if buffer is empty
+    if (buffer->data.empty()) {
+        buffer->data = response;
+    } else {
+        // If buffer has data, we need to append - still use efficient append
+        buffer->data.reserve(buffer->data.size() + response.length());
+        buffer->data += response;
+    }
+    
     buffer->isComplete = true;
     
     // Try to send immediately first
     size_t remaining = buffer->data.length() - buffer->sent;
     if (remaining > 0) {
-        size_t chunkSize = (remaining > 65536) ? 65536 : remaining; // 64KB chunks max
-        ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, MSG_NOSIGNAL);
+        size_t chunkSize = (remaining > 2097152) ? 2097152 : remaining; // Increased to 2MB chunks for maximum performance
+        
+        // Use MSG_MORE for better TCP performance when more data is coming
+        int flags = MSG_NOSIGNAL;
+        if (remaining > chunkSize) {
+            flags |= MSG_MORE; // Tell kernel more data is coming
+        }
+        
+        ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, flags);
         
         if (sent > 0) {
             buffer->sent += sent;
@@ -1847,6 +1969,14 @@ void EpollClasse::handleClientWrite(int client_fd) {
     }
     
     ResponseBuffer* buffer = bufferIt->second;
+    
+    // Check if this is a zero-copy response
+    if (buffer->use_sendfile) {
+        handleZeroCopyWrite(client_fd);
+        return;
+    }
+    
+    // Regular response handling
     if (buffer->sent >= buffer->data.length()) {
         // All data sent, clean up and close connection
         Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Sent complete response to client %d (%zu bytes)", 
@@ -1861,11 +1991,17 @@ void EpollClasse::handleClientWrite(int client_fd) {
         return;
     }
     
-    // Send as much data as possible
+    // Send as much data as possible - use larger chunks for better throughput
     size_t remaining = buffer->data.length() - buffer->sent;
-    size_t chunkSize = (remaining > 65536) ? 65536 : remaining; // 64KB chunks max
+    size_t chunkSize = (remaining > 2097152) ? 2097152 : remaining; // Increased to 2MB chunks for maximum performance
     
-    ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, MSG_NOSIGNAL);
+    // Use MSG_MORE for better TCP performance when more data is coming
+    int flags = MSG_NOSIGNAL;
+    if (remaining > chunkSize) {
+        flags |= MSG_MORE; // Tell kernel more data is coming - improves TCP efficiency
+    }
+    
+    ssize_t sent = send(client_fd, buffer->data.c_str() + buffer->sent, chunkSize, flags);
     
     if (sent > 0) {
         buffer->sent += sent;
@@ -1929,5 +2065,135 @@ void EpollClasse::cleanupClientResponse(int client_fd) {
     std::map<int, bool>::iterator epollIt = _clientsInEpollOut.find(client_fd);
     if (epollIt != _clientsInEpollOut.end()) {
         _clientsInEpollOut.erase(epollIt);
+    }
+}
+
+// Zero-copy file response implementation
+bool EpollClasse::tryZeroCopyFileResponse(int client_fd, const std::string& filePath, const std::string& mimeType) {
+    // Open file for reading
+    int file_fd = open(filePath.c_str(), O_RDONLY);
+    if (file_fd < 0) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to open file for zero-copy: %s", filePath.c_str());
+        return false;
+    }
+    
+    // Get file size
+    struct stat file_stat;
+    if (fstat(file_fd, &file_stat) < 0) {
+        close(file_fd);
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to stat file for zero-copy: %s", filePath.c_str());
+        return false;
+    }
+    
+    // Check if client already has a response buffer (might be from previous request)
+    std::map<int, ResponseBuffer*>::iterator it = _responseBuffers.find(client_fd);
+    if (it != _responseBuffers.end() && it->second->use_sendfile) {
+        // Clean up previous file descriptor if any
+        if (it->second->file_fd >= 0) {
+            close(it->second->file_fd);
+        }
+    }
+    
+    // Generate HTTP headers
+    std::string headers = "HTTP/1.1 200 OK\r\n";
+    headers += "Content-Type: " + mimeType + "\r\n";
+    headers += "Content-Length: " + sizeToString(file_stat.st_size) + "\r\n";
+    headers += "Connection: close\r\n\r\n";
+    
+    // Create or update response buffer for zero-copy
+    ResponseBuffer* buffer;
+    if (it != _responseBuffers.end()) {
+        buffer = it->second;
+    } else {
+        buffer = new ResponseBuffer();
+        _responseBuffers[client_fd] = buffer;
+    }
+    
+    buffer->data = headers;  // Only headers in memory
+    buffer->sent = 0;
+    buffer->isComplete = false;
+    buffer->use_sendfile = true;
+    buffer->file_fd = file_fd;
+    buffer->file_offset = 0;
+    buffer->file_size = file_stat.st_size;
+    
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy file response prepared: %s (%ld bytes)", 
+                   filePath.c_str(), file_stat.st_size);
+    
+    // Add client to epoll for writing
+    struct epoll_event event;
+    event.events = EPOLLOUT | EPOLLET;
+    event.data.fd = client_fd;
+    
+    std::map<int, bool>::iterator epollIt = _clientsInEpollOut.find(client_fd);
+    if (epollIt == _clientsInEpollOut.end()) {
+        if (epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, client_fd, &event) == -1) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to add client to epoll for zero-copy write");
+            close(file_fd);
+            return false;
+        }
+        _clientsInEpollOut[client_fd] = true;
+    }
+    
+    return true;
+}
+
+void EpollClasse::handleZeroCopyWrite(int client_fd) {
+    std::map<int, ResponseBuffer*>::iterator it = _responseBuffers.find(client_fd);
+    if (it == _responseBuffers.end()) {
+        return;
+    }
+    
+    ResponseBuffer* buffer = it->second;
+    
+    // First, send HTTP headers if not already sent
+    if (buffer->sent < buffer->data.size()) {
+        ssize_t bytes_sent = send(client_fd, 
+                                 buffer->data.c_str() + buffer->sent, 
+                                 buffer->data.size() - buffer->sent, 
+                                 MSG_NOSIGNAL);
+        
+        if (bytes_sent < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return; // Try again later
+            }
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error sending headers for zero-copy: %s", strerror(errno));
+            cleanupClientResponse(client_fd);
+            return;
+        }
+        
+        buffer->sent += bytes_sent;
+        
+        // If headers not fully sent, continue next time
+        if (buffer->sent < buffer->data.size()) {
+            return;
+        }
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy headers sent (%zu bytes)", buffer->data.size());
+    }
+    
+    // Headers sent, now use sendfile for the file content
+    if (buffer->use_sendfile && buffer->file_fd >= 0 && buffer->file_offset < (off_t)buffer->file_size) {
+        ssize_t bytes_sent = sendfile(client_fd, buffer->file_fd, 
+                                     &buffer->file_offset, 
+                                     buffer->file_size - buffer->file_offset);
+        
+        if (bytes_sent < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return; // Try again later
+            }
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error in sendfile: %s", strerror(errno));
+            cleanupClientResponse(client_fd);
+            return;
+        }
+        
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy sendfile: %ld bytes (offset: %ld/%zu)", 
+                       bytes_sent, buffer->file_offset, buffer->file_size);
+        
+        // Check if file transfer is complete
+        if (buffer->file_offset >= (off_t)buffer->file_size) {
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy file transfer complete: %zu bytes", buffer->file_size);
+            cleanupClientResponse(client_fd);
+        }
     }
 }

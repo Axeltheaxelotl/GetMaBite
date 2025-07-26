@@ -18,7 +18,22 @@ struct ResponseBuffer {
     size_t sent;
     bool isComplete;
     
-    ResponseBuffer() : sent(0), isComplete(false) {}
+    // Zero-copy file transfer support
+    int file_fd;
+    off_t file_offset;
+    size_t file_size;
+    bool use_sendfile;
+    
+    ResponseBuffer() : sent(0), isComplete(false), file_fd(-1), file_offset(0), file_size(0), use_sendfile(false) {
+        // Pre-allocate reasonable initial capacity - avoid excessive memory usage
+        data.reserve(8192); // 8KB initial capacity - more reasonable for most responses
+    }
+    
+    ~ResponseBuffer() {
+        if (file_fd >= 0) {
+            close(file_fd);
+        }
+    }
 };
 
 // Structure pour les processus CGI

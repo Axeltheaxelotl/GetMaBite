@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: smasse <smasse@student.42luxembourg.lu>    +#+  +:+       +#+         #
+#    By: rbiskin <rbiskin@student.42luxembourg.l    +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
-#    Updated: 2025/06/24 08:34:20 by smasse           ###   ########.fr        #
+#    Updated: 2025/07/26 17:22:54 by rbiskin          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 

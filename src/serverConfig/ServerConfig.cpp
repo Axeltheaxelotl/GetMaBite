@@ -54,6 +54,26 @@ void ServerConfig::setupServer()
         throw std::runtime_error("Setsockopt failed");
     }
 
+    // Désactiver l'algorithme de Nagle pour réduire la latence
+    if (setsockopt(_server_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) == -1)
+    {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Setsockopt TCP_NODELAY failed");
+        close(_server_fd);
+        throw std::runtime_error("Setsockopt TCP_NODELAY failed");
+    }
+
+    // Optimize TCP performance for high throughput
+    int tcp_window_size = 2097152; // 2MB TCP window size
+    if (setsockopt(_server_fd, SOL_SOCKET, SO_SNDBUF, &tcp_window_size, sizeof(tcp_window_size)) == -1)
+    {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Warning: Could not set SO_SNDBUF (non-critical)");
+    }
+    
+    if (setsockopt(_server_fd, SOL_SOCKET, SO_RCVBUF, &tcp_window_size, sizeof(tcp_window_size)) == -1)
+    {
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Warning: Could not set SO_RCVBUF (non-critical)");
+    }
+
     // Mode non-bloquant
     int flags = fcntl(_server_fd, F_GETFL, 0);
     if (flags == -1)

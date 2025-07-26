@@ -16,6 +16,7 @@ class Logger
 public:
     static void logMsg(const char *color, int output, const char *format, ...)
     {
+        // return; // Disable logging for performance mode
         va_list args;
         va_start(args, format);
         if (output == CONSOLE_OUTPUT)
