@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: rbiskin <rbiskin@student.42luxembourg.l    +#+  +:+       +#+         #
+#    By: alanty <alanty@student.42.fr>              +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/02/05 15:24:34 by smasse            #+#    #+#              #
-#    Updated: 2025/07/26 17:22:54 by rbiskin          ###   ########.fr        #
+#    Updated: 2025/07/28 16:42:36 by alanty           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -32,6 +32,7 @@ SRCS      = src/main.cpp \
             src/routes/RedirectionHandler.cpp \
             src/routes/AutoIndex.cpp \
             src/http/RequestBufferManager.cpp \
+            src/http/Cookie.cpp \
 #             src/cgi/CgiHandler.cpp
 
 OBJS      = $(patsubst src/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))

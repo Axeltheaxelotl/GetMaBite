@@ -791,7 +791,7 @@ for (std::vector<Location>::const_iterator it = server.locations.begin();
         if (method == "HEAD") {
             handleHeadRequest(client_fd, path, server);
         } else {
-            handleGetRequest(client_fd, path, server, queryString);
+            handleGetRequest(client_fd, path, server, headers, queryString);
         }
     } else if (method == "POST") {
         handlePostRequest(client_fd, path, body, headers, server, queryString);
@@ -874,6 +874,36 @@ std::string EpollClasse::generateHttpResponse(int statusCode, const std::string 
     for (std::map<std::string, std::string>::const_iterator it = headers.begin(); 
          it != headers.end(); ++it) {
         response << it->first << ": " << it->second << "\r\n";
+    }
+    
+    response << "\r\n" << body;
+    return response.str();
+}
+
+// Generate HTTP response with cookies for a specific client
+std::string EpollClasse::generateHttpResponseWithCookies(int client_fd, int statusCode, const std::string &contentType, 
+                                                        const std::string &body, const std::map<std::string, std::string> &headers) {
+    std::ostringstream response;
+    response << "HTTP/1.1 " << statusCode << " " << getStatusCodeString(statusCode) << "\r\n";
+    response << "Date: " << getCurrentDateTime() << "\r\n";
+    response << "Server: Webserv/1.0\r\n";
+    response << "Content-Type: " << contentType << "\r\n";
+    response << "Content-Length: " << body.length() << "\r\n";
+    response << "Connection: close\r\n";
+    
+    // Add custom headers
+    for (std::map<std::string, std::string>::const_iterator it = headers.begin(); 
+         it != headers.end(); ++it) {
+        response << it->first << ": " << it->second << "\r\n";
+    }
+    
+    // Add Set-Cookie headers if any cookies are set for this client
+    if (_clientCookies.find(client_fd) != _clientCookies.end()) {
+        std::vector<std::string> cookieHeaders = _clientCookies[client_fd].generateSetCookieHeaders();
+        for (std::vector<std::string>::const_iterator it = cookieHeaders.begin();
+             it != cookieHeaders.end(); ++it) {
+            response << "Set-Cookie: " << *it << "\r\n";
+        }
     }
     
     response << "\r\n" << body;
@@ -1101,8 +1131,28 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
 }
 
 // Gestion des requêtes GET
-void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const Server &server, const std::string &queryString) {
+void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const Server &server, 
+                                  const std::map<std::string, std::string> &headers, const std::string &queryString) {
+    // Parse cookies from request headers
+    parseCookiesFromRequest(client_fd, headers);
+    
     std::string resolvedPath = resolvePath(server, path);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "GET request for path: %s -> %s", path.c_str(), resolvedPath.c_str());
+    
+    // Check session and create one if needed for demo purposes
+    std::string sessionId = getSessionIdFromCookies(client_fd);
+    if (sessionId.empty()) {
+        sessionId = SessionManager::createSession();
+        createSessionCookie(client_fd, sessionId);
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Created new session: %s", sessionId.c_str());
+    } else if (SessionManager::isValidSession(sessionId)) {
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Valid session found: %s", sessionId.c_str());
+    } else {
+        // Session expired, create new one
+        sessionId = SessionManager::createSession();
+        createSessionCookie(client_fd, sessionId);
+        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Session expired, created new: %s", sessionId.c_str());
+    }
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "GET request for path: %s -> %s", path.c_str(), resolvedPath.c_str());
     
     // Vérifier si c'est un script CGI
@@ -1126,7 +1176,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         if (autoindexEnabled) {
             AutoIndex autoIndex;
             std::string autoIndexPage = autoIndex.generateAutoIndexPage(resolvedPath);
-            std::string response = generateHttpResponse(200, "text/html", autoIndexPage);
+            std::string response = generateHttpResponseWithCookies(client_fd, 200, "text/html", autoIndexPage);
             queueResponse(client_fd, response);
             return;
         } else {
@@ -1137,7 +1187,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
                 if (fileExists(indexPath)) {
                     std::string content = readFile(indexPath);
                     std::string mimeType = getMimeType(indexPath);
-                    std::string response = generateHttpResponse(200, mimeType, content);
+                    std::string response = generateHttpResponseWithCookies(client_fd, 200, mimeType, content);
                     queueResponse(client_fd, response);
                     return;
                 }
@@ -1176,7 +1226,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     // Un fichier vide est valide, ne pas retourner d'erreur 500
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File read successfully: %s (%zu bytes)", resolvedPath.c_str(), content.length());
     
-    std::string response = generateHttpResponse(200, mimeType, content);
+    std::string response = generateHttpResponseWithCookies(client_fd, 200, mimeType, content);
     queueResponse(client_fd, response);
 }
 
@@ -2094,11 +2144,24 @@ bool EpollClasse::tryZeroCopyFileResponse(int client_fd, const std::string& file
         }
     }
     
-    // Generate HTTP headers
+    // Generate HTTP headers with cookies
     std::string headers = "HTTP/1.1 200 OK\r\n";
+    headers += "Date: " + getCurrentDateTime() + "\r\n";
+    headers += "Server: Webserv/1.0\r\n";
     headers += "Content-Type: " + mimeType + "\r\n";
     headers += "Content-Length: " + sizeToString(file_stat.st_size) + "\r\n";
-    headers += "Connection: close\r\n\r\n";
+    headers += "Connection: close\r\n";
+    
+    // Add Set-Cookie headers if any cookies are set for this client
+    if (_clientCookies.find(client_fd) != _clientCookies.end()) {
+        std::vector<std::string> cookieHeaders = _clientCookies[client_fd].generateSetCookieHeaders();
+        for (std::vector<std::string>::const_iterator it = cookieHeaders.begin();
+             it != cookieHeaders.end(); ++it) {
+            headers += "Set-Cookie: " + *it + "\r\n";
+        }
+    }
+    
+    headers += "\r\n";
     
     // Create or update response buffer for zero-copy
     ResponseBuffer* buffer;
@@ -2196,4 +2259,54 @@ void EpollClasse::handleZeroCopyWrite(int client_fd) {
             cleanupClientResponse(client_fd);
         }
     }
+}
+
+// ============================================================================
+// Cookie and Session Management Implementation
+// ============================================================================
+
+void EpollClasse::parseCookiesFromRequest(int client_fd, const std::map<std::string, std::string> &headers) {
+    std::map<std::string, std::string>::const_iterator cookieIt = headers.find("Cookie");
+    if (cookieIt != headers.end()) {
+        if (_clientCookies.find(client_fd) == _clientCookies.end()) {
+            _clientCookies[client_fd] = CookieManager();
+        }
+        _clientCookies[client_fd].parseCookieHeader(cookieIt->second);
+        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Parsed cookies from client %d: %s", 
+                       client_fd, cookieIt->second.c_str());
+    }
+}
+
+void EpollClasse::addCookieToResponse(int client_fd, const Cookie& cookie) {
+    if (_clientCookies.find(client_fd) == _clientCookies.end()) {
+        _clientCookies[client_fd] = CookieManager();
+    }
+    _clientCookies[client_fd].addCookie(cookie);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Added cookie to client %d: %s=%s", 
+                   client_fd, cookie.getName().c_str(), cookie.getValue().c_str());
+}
+
+void EpollClasse::createSessionCookie(int client_fd, const std::string& sessionId) {
+    Cookie sessionCookie("SESSIONID", sessionId);
+    sessionCookie.setPath("/");
+    sessionCookie.setHttpOnly(true);
+    // Session cookie expires when browser closes (no Expires/Max-Age set)
+    addCookieToResponse(client_fd, sessionCookie);
+    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Created session cookie for client %d: %s", 
+                   client_fd, sessionId.c_str());
+}
+
+std::string EpollClasse::getSessionIdFromCookies(int client_fd) {
+    if (_clientCookies.find(client_fd) != _clientCookies.end()) {
+        const Cookie* sessionCookie = _clientCookies[client_fd].getCookie("SESSIONID");
+        if (sessionCookie && sessionCookie->isValid()) {
+            return sessionCookie->getValue();
+        }
+    }
+    return "";
+}
+
+void EpollClasse::cleanupClientCookies(int client_fd) {
+    _clientCookies.erase(client_fd);
+    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Cleaned up cookies for client %d", client_fd);
 }

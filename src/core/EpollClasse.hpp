@@ -15,6 +15,7 @@
 #include "../config/Server.hpp"
 #include "../serverConfig/ServerConfig.hpp"
 #include "TimeoutManager.hpp"
+#include "../http/Cookie.hpp"
 
 #define MAX_EVENTS 1024
 #define MAX_CGI_PROCESSES 100
@@ -40,12 +41,17 @@ private:
     std::map<int, ResponseBuffer*> _responseBuffers;
     std::map<int, bool> _clientsInEpollOut;
     
+    // Cookie and session management
+    std::map<int, CookieManager> _clientCookies;  // client_fd -> CookieManager
+    
     // Méthodes privées
     void setNonBlocking(int fd);
     std::string resolvePath(const Server &server, const std::string &requestedPath);
     std::string getMimeType(const std::string &filePath);
     std::string generateHttpResponse(int statusCode, const std::string &contentType, 
                                    const std::string &body, const std::map<std::string, std::string> &headers = std::map<std::string, std::string>());
+    std::string generateHttpResponseWithCookies(int client_fd, int statusCode, const std::string &contentType, 
+                                               const std::string &body, const std::map<std::string, std::string> &headers = std::map<std::string, std::string>());
     
     // Zero-copy I/O methods
     bool tryZeroCopyFileResponse(int client_fd, const std::string& filePath, const std::string& mimeType);
@@ -65,7 +71,9 @@ private:
     std::string decodeChunkedBody(const std::string &chunkedData);
     
     // HTTP methods
-    void handleGetRequest(int client_fd, const std::string &path, const Server &server, const std::string &queryString = "");
+    void handleGetRequest(int client_fd, const std::string &path, const Server &server, 
+                         const std::map<std::string, std::string> &headers = std::map<std::string, std::string>(), 
+                         const std::string &queryString = "");
     void handlePostRequest(int client_fd, const std::string &path, const std::string &body, 
                           const std::map<std::string, std::string> &headers, const Server &server, const std::string &queryString = "");
     void handleDeleteRequest(int client_fd, const std::string &path, const Server &server);
@@ -95,6 +103,13 @@ private:
     void handleFileUpload(int client_fd, const std::string &body, 
                          const std::map<std::string, std::string> &headers, const Server &server);
     std::map<std::string, std::string> parseMultipartData(const std::string &body, const std::string &boundary);
+    
+    // Cookie and session management
+    void parseCookiesFromRequest(int client_fd, const std::map<std::string, std::string> &headers);
+    void addCookieToResponse(int client_fd, const Cookie& cookie);
+    void createSessionCookie(int client_fd, const std::string& sessionId);
+    std::string getSessionIdFromCookies(int client_fd);
+    void cleanupClientCookies(int client_fd);
 
 public:
     EpollClasse();
