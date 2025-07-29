@@ -1,12 +1,1 @@
-[Desktop Entry]
-Encoding=UTF-8
-Value=1.0
-Type=Application
-Name=Terraria
-GenericName=Terraria
-Comment=Terraria
-Icon=/home/alanty/sgoinfre/Terraria/Terraria/support/icon.png
-Exec="/home/alanty/sgoinfre/Terraria/Terraria/start.sh" ""
-Categories=Game;
-Path=/home/alanty/sgoinfre/Terraria/Terraria
-
+Test POST with timestamp: 2025-07-29T12:46:38.589Z

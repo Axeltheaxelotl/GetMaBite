@@ -53,9 +53,6 @@ private:
     std::string generateHttpResponseWithCookies(int client_fd, int statusCode, const std::string &contentType, 
                                                const std::string &body, const std::map<std::string, std::string> &headers = std::map<std::string, std::string>());
     
-    // Zero-copy I/O methods
-    bool tryZeroCopyFileResponse(int client_fd, const std::string& filePath, const std::string& mimeType);
-    void handleZeroCopyWrite(int client_fd);
     std::string getStatusCodeString(int statusCode);
     std::string getCurrentDateTime();
     bool fileExists(const std::string &filePath);

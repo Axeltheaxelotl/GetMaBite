@@ -1,25 +1,91 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Webserv Advanced Testing Suite</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>🚀 Webserv Test Suite - Single Page App</title>
     <style>
+        /* Theme Variables */
         :root {
-            --primary-color: #667eea;
-            --secondary-color: #764ba2;
-            --success-color: #10b981;
-            --error-color: #ef4444;
-            --warning-color: #f59e0b;
-            --dark-bg: #1f2937;
-            --light-bg: #f8fafc;
-            --card-bg: #ffffff;
-            --text-dark: #111827;
-            --text-light: #6b7280;
-            --border-color: #e5e7eb;
-            --shadow: 0 10px 25px rgba(0,0,0,0.1);
-            --shadow-hover: 0 20px 40px rgba(0,0,0,0.15);
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --accent-color: #007bff;
+            --card-bg: #f8f9fa;
+            --border-color: #dee2e6;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+        }
+
+        /* Dark theme */
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --accent-color: #4dabf7;
+            --card-bg: #2d2d2d;
+            --border-color: #404040;
+            --shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Ocean theme */
+        [data-theme="ocean"] {
+            --bg-color: #0f1419;
+            --text-color: #e6e6e6;
+            --accent-color: #00d4aa;
+            --card-bg: #1e2328;
+            --border-color: #2a3441;
+            --shadow: 0 2px 10px rgba(0,212,170,0.2);
+        }
+
+        /* Sunset theme */
+        [data-theme="sunset"] {
+            --bg-color: #2d1b69;
+            --text-color: #f8f8f2;
+            --accent-color: #ff79c6;
+            --card-bg: #44475a;
+            --border-color: #6272a4;
+            --shadow: 0 2px 10px rgba(255,121,198,0.3);
+        }
+
+        /* Forest theme */
+        [data-theme="forest"] {
+            --bg-color: #1b2b1b;
+            --text-color: #e8f5e8;
+            --accent-color: #7cb342;
+            --card-bg: #2e3c2e;
+            --border-color: #4a5c4a;
+            --shadow: 0 2px 10px rgba(124,179,66,0.2);
+        }
+
+        /* Cyberpunk theme */
+        [data-theme="cyberpunk"] {
+            --bg-color: #0a0a0a;
+            --text-color: #00ff41;
+            --accent-color: #ff073a;
+            --card-bg: #1a1a1a;
+            --border-color: #333333;
+            --shadow: 0 2px 10px rgba(255,7,58,0.4);
+        }
+
+        /* Lavender theme */
+        [data-theme="lavender"] {
+            --bg-color: #f5f3ff;
+            --text-color: #4c1d95;
+            --accent-color: #8b5cf6;
+            --card-bg: #ede9fe;
+            --border-color: #c4b5fd;
+            --shadow: 0 2px 10px rgba(139,92,246,0.15);
+        }
+
+        /* High contrast theme */
+        [data-theme="contrast"] {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-color: #ffff00;
+            --card-bg: #1a1a1a;
+            --border-color: #ffffff;
+            --shadow: 0 2px 10px rgba(255,255,255,0.3);
         }
 
         * {
@@ -29,628 +95,910 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
             min-height: 100vh;
-            color: var(--text-dark);
-            line-height: 1.6;
         }
 
+        /* Navigation */
+        .navbar {
+            background: var(--card-bg);
+            border-bottom: 2px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-tab {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 2px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+            text-decoration: none;
+        }
+
+        .nav-tab:hover {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .nav-tab.active {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .theme-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .theme-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--border-color);
+            background: var(--card-bg);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s ease;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+            border-color: var(--accent-color);
+        }
+
+        /* Main Content */
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 2rem;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
-            animation: fadeInUp 0.8s ease-out;
+        .page {
+            display: none;
+            animation: fadeIn 0.3s ease;
         }
 
-        .header h1 {
-            font-size: 3rem;
-            font-weight: 800;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            margin-bottom: 1rem;
+        .page.active {
+            display: block;
         }
 
-        .header p {
-            font-size: 1.2rem;
-            color: rgba(255,255,255,0.9);
-            max-width: 600px;
-            margin: 0 auto;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 3rem;
-            animation: fadeInUp 0.8s ease-out 0.2s both;
-        }
-
-        .stat-card {
-            background: rgba(255,255,255,0.95);
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
             padding: 1.5rem;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
-            text-align: center;
-            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
         }
 
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-hover);
-        }
-
-        .stat-card i {
-            font-size: 2rem;
+        .card h2 {
+            color: var(--accent-color);
             margin-bottom: 1rem;
-            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        .grid-item {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .grid-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            margin: 0.25rem;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+        }
+
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); color: var(--text-color); }
+        .btn-danger { background: var(--danger); }
+
+        /* Status indicators */
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: rgba(40, 167, 69, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-error {
+            background: rgba(220, 53, 69, 0.1);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .status-info {
+            background: rgba(0, 123, 255, 0.1);
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+        }
+
+        /* Log area */
+        .log-area {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.25rem 0;
+        }
+
+        .log-info { color: var(--accent-color); }
+        .log-success { color: var(--success); }
+        .log-error { color: var(--danger); }
+        .log-warning { color: var(--warning); }
+
+        /* Response display */
+        .response-display {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            min-height: 200px;
+        }
+
+        .response-iframe {
+            width: 100%;
+            height: 300px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: white;
+        }
+
+        /* Theme preview */
+        .theme-preview {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-top: 0.5rem;
+        }
+
+        .color-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Input styling */
+        input, textarea, select {
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+
+        /* Stats display */
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 1rem 0;
+        }
+
+        .stat {
+            text-align: center;
         }
 
         .stat-number {
             font-size: 2rem;
             font-weight: bold;
-            color: var(--text-dark);
-            display: block;
+            color: var(--accent-color);
         }
 
         .stat-label {
-            color: var(--text-light);
-            font-size: 0.9rem;
+            font-size: 0.8rem;
+            opacity: 0.8;
         }
 
-        .test-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 2rem;
-            animation: fadeInUp 0.8s ease-out 0.4s both;
-        }
-
-        .test-section {
-            background: var(--card-bg);
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            transition: all 0.3s ease;
-            border: 1px solid var(--border-color);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .test-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-        }
-
-        .test-section:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-hover);
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .section-header i {
-            font-size: 1.5rem;
-            margin-right: 1rem;
-            color: var(--primary-color);
-        }
-
-        .section-header h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: var(--text-dark);
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: var(--light-bg);
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            min-width: 120px;
-            justify-content: center;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-success {
-            background: var(--success-color);
-            color: white;
-        }
-
-        .btn-danger {
-            background: var(--error-color);
-            color: white;
-        }
-
-        .btn-warning {
-            background: var(--warning-color);
-            color: white;
-        }
-
-        .result-panel {
-            margin-top: 1.5rem;
-            padding: 1rem;
-            border-radius: 10px;
-            background: var(--light-bg);
-            border: 1px solid var(--border-color);
-            min-height: 100px;
-            font-family: 'Monaco', 'Consolas', monospace;
-            font-size: 0.9rem;
-            white-space: pre-wrap;
-            overflow-y: auto;
-            max-height: 300px;
-        }
-
-        .result-success {
-            border-color: var(--success-color);
-            background: rgba(16, 185, 129, 0.1);
-        }
-
-        .result-error {
-            border-color: var(--error-color);
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: var(--border-color);
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 1rem 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
-        }
-
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-
-        .advanced-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin: 1rem 0;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 0.5rem;
-        }
-
-        .status-online {
-            background: var(--success-color);
-            box-shadow: 0 0 10px var(--success-color);
-        }
-
-        .status-offline {
-            background: var(--error-color);
-        }
-
+        /* Mobile responsive */
         @media (max-width: 768px) {
-            .test-grid {
+            .navbar {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .nav-tabs {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .grid {
                 grid-template-columns: 1fr;
             }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .advanced-controls {
-                grid-template-columns: 1fr;
+
+            .stats {
+                flex-direction: column;
+                gap: 1rem;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1><i class="fas fa-rocket"></i> Webserv Advanced Testing Suite</h1>
-            <p>Interface de test complète et moderne pour votre serveur web HTTP/1.1</p>
-            <div class="status-indicator status-online" id="serverStatus"></div>
-            <span id="serverStatusText">Serveur en ligne</span>
-        </header>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <i class="fas fa-chart-line"></i>
-                <span class="stat-number" id="totalRequests">0</span>
-                <span class="stat-label">Requêtes totales</span>
-            </div>
-            <div class="stat-card">
-                <i class="fas fa-clock"></i>
-                <span class="stat-number" id="avgResponseTime">0ms</span>
-                <span class="stat-label">Temps de réponse moyen</span>
-            </div>
-            <div class="stat-card">
-                <i class="fas fa-check-circle"></i>
-                <span class="stat-number" id="successRate">100%</span>
-                <span class="stat-label">Taux de succès</span>
-            </div>
-            <div class="stat-card">
-                <i class="fas fa-database"></i>
-                <span class="stat-number" id="dataTransferred">0 KB</span>
-                <span class="stat-label">Données transférées</span>
-            </div>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-brand">🚀 Webserv Test Suite</div>
+        
+        <div class="nav-tabs">
+            <a href="#webtests" class="nav-tab active" onclick="showPage('webtests')">🌐 Web Tests</a>
+            <a href="#themes" class="nav-tab" onclick="showPage('themes')">🎨 Themes</a>
+            <a href="#sessions" class="nav-tab" onclick="showPage('sessions')">📦 Sessions</a>
+            <a href="#cgi" class="nav-tab" onclick="showPage('cgi')">⚙️ CGI Tests</a>
+            <a href="#cookies" class="nav-tab" onclick="showPage('cookies')">🍪 Cookies</a>
+            <a href="#debug" class="nav-tab" onclick="showPage('debug')">🔧 Debug</a>
         </div>
 
-        <div class="test-grid">
-            <!-- Section GET Tests -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-download"></i>
-                    <h2>Tests GET</h2>
-                </div>
-                
-                <div class="form-group">
-                    <label>URL à tester :</label>
-                    <input type="text" class="form-control" id="getUrl" value="/tests/index.html" placeholder="/path/to/resource">
-                </div>
-                
-                <div class="advanced-controls">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="getHeaders">
-                        <label for="getHeaders">Afficher les headers</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="getTime" checked>
-                        <label for="getTime">Mesurer le temps</label>
-                    </div>
-                </div>
-                
-                <button class="btn btn-primary" onclick="testGet()">
-                    <i class="fas fa-play"></i> Exécuter GET
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="getProgress"></div>
-                </div>
-                
-                <div id="getResult" class="result-panel">Cliquez sur "Exécuter GET" pour commencer le test...</div>
-            </section>
+        <div class="theme-controls">
+            <button class="theme-btn" onclick="cycleTheme()" title="Cycle Themes" id="theme-cycle">🎨</button>
+            <button class="theme-btn" onclick="randomTheme()" title="Random Theme">🎲</button>
+        </div>
+    </nav>
 
-            <!-- Section POST Tests -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-upload"></i>
-                    <h2>Tests POST</h2>
-                </div>
+    <div class="container">
+        <!-- Web Tests Page -->
+        <div id="webtests" class="page active">
+            <div class="card">
+                <h2>🌐 HTTP Method Tests</h2>
+                <p>Comprehensive testing of HTTP methods: GET, POST, DELETE with advanced options.</p>
                 
-                <div class="form-group">
-                    <label>URL de destination :</label>
-                    <input type="text" class="form-control" id="postUrl" value="/tests/post_result.txt">
-                </div>
-                
-                <div class="form-group">
-                    <label>Contenu à envoyer :</label>
-                    <textarea class="form-control" id="postContent" rows="4" placeholder="Tapez votre contenu ici...">Ceci est un test POST avancé avec timestamp: ${new Date().toISOString()}</textarea>
-                </div>
-                
-                <div class="advanced-controls">
-                    <div class="form-group">
-                        <label>Content-Type :</label>
-                        <select class="form-control" id="postContentType">
+                <div class="grid">
+                    <div class="grid-item">
+                        <h4>🔍 GET Test</h4>
+                        <input type="text" id="getUrl" placeholder="URL to test" value="/tests/index.html" style="width: 100%; margin-bottom: 0.5rem;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <label><input type="checkbox" id="getHeaders"> Show headers</label>
+                            <label style="margin-left: 1rem;"><input type="checkbox" id="getTime" checked> Measure time</label>
+                        </div>
+                        <button class="btn" onclick="testGet()">Execute GET</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>📤 POST Test</h4>
+                        <input type="text" id="postUrl" placeholder="Destination URL" value="/tests/post_result.txt" style="width: 100%; margin-bottom: 0.5rem;">
+                        <textarea id="postContent" placeholder="Content to send" style="width: 100%; margin-bottom: 0.5rem; height: 60px;">Test POST with timestamp: ${new Date().toISOString()}</textarea>
+                        <select id="postContentType" style="width: 100%; margin-bottom: 0.5rem;">
                             <option value="text/plain">text/plain</option>
                             <option value="application/json">application/json</option>
-                            <option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option>
+                            <option value="application/x-www-form-urlencoded">form-urlencoded</option>
                         </select>
+                        <button class="btn btn-success" onclick="testPost()">Execute POST</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>🗑️ DELETE Test</h4>
+                        <input type="text" id="deleteUrl" placeholder="File to delete" value="/tests/post_result.txt" style="width: 100%; margin-bottom: 0.5rem;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <label><input type="checkbox" id="deleteConfirm"> I confirm deletion</label>
+                        </div>
+                        <button class="btn btn-danger" onclick="testDelete()">Execute DELETE</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>📁 File Upload</h4>
+                        <input type="file" id="uploadFile" style="width: 100%; margin-bottom: 0.5rem;">
+                        <input type="text" id="uploadDestination" placeholder="Upload destination" value="/tests/uploads/" style="width: 100%; margin-bottom: 0.5rem;">
+                        <button class="btn btn-warning" onclick="testUpload()">Upload File</button>
                     </div>
                 </div>
-                
-                <button class="btn btn-success" onclick="testPost()">
-                    <i class="fas fa-paper-plane"></i> Exécuter POST
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="postProgress"></div>
-                </div>
-                
-                <div id="postResult" class="result-panel">Prêt pour le test POST...</div>
-            </section>
 
-            <!-- Section DELETE Tests -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-trash"></i>
-                    <h2>Tests DELETE</h2>
-                </div>
-                
-                <div class="form-group">
-                    <label>Fichier à supprimer :</label>
-                    <input type="text" class="form-control" id="deleteUrl" value="/tests/post_result.txt">
-                </div>
-                
-                <div class="checkbox-group">
-                    <input type="checkbox" id="deleteConfirm">
-                    <label for="deleteConfirm">Je confirme la suppression</label>
-                </div>
-                
-                <button class="btn btn-danger" onclick="testDelete()">
-                    <i class="fas fa-trash-alt"></i> Exécuter DELETE
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="deleteProgress"></div>
-                </div>
-                
-                <div id="deleteResult" class="result-panel">Sélectionnez un fichier et confirmez...</div>
-            </section>
-
-            <!-- Section Upload Files -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <h2>Upload de Fichiers</h2>
-                </div>
-                
-                <div class="form-group">
-                    <label>Sélectionner un fichier :</label>
-                    <input type="file" class="form-control" id="uploadFile" multiple>
-                </div>
-                
-                <div class="form-group">
-                    <label>Nom du fichier de destination :</label>
-                    <input type="text" class="form-control" id="uploadDestination" value="/tests/uploaded_file.txt">
-                </div>
-                
-                <button class="btn btn-primary" onclick="testUpload()">
-                    <i class="fas fa-upload"></i> Uploader le fichier
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="uploadProgress"></div>
-                </div>
-                
-                <div id="uploadResult" class="result-panel">Aucun fichier sélectionné...</div>
-            </section>
-
-            <!-- Section CGI Tests -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-code"></i>
-                    <h2>Tests CGI</h2>
-                </div>
-                
-                <div class="form-group">
-                    <label>Script CGI :</label>
-                    <select class="form-control" id="cgiScript">
-                        <option value="/tests/simple.cgi.py">Simple CGI Test</option>
-                        <option value="/tests/aaa.cgi.py">Advanced CGI Test</option>
-                        <option value="/main/tests/error.cgi.py">Error CGI Test</option>
-                        <option value="/main/tests/stderr.cgi.py">Stderr CGI Test</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>Paramètres GET (query string) :</label>
-                    <input type="text" class="form-control" id="cgiQuery" placeholder="param1=value1&param2=value2">
-                </div>
-                
-                <div class="form-group">
-                    <label>Données POST (optionnel) :</label>
-                    <textarea class="form-control" id="cgiPostData" rows="3" placeholder="Données à envoyer en POST au script CGI"></textarea>
-                </div>
-                
-                <button class="btn btn-warning" onclick="testCGI()">
-                    <i class="fas fa-terminal"></i> Exécuter CGI
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="cgiProgress"></div>
-                </div>
-                
-                <div id="cgiResult" class="result-panel">Sélectionnez un script CGI...</div>
-            </section>
-
-            <!-- Section Performance Tests -->
-            <section class="test-section">
-                <div class="section-header">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <h2>Tests de Performance</h2>
-                </div>
-                
-                <div class="advanced-controls">
-                    <div class="form-group">
-                        <label>Nombre de requêtes :</label>
-                        <input type="number" class="form-control" id="perfRequests" value="10" min="1" max="1000">
-                    </div>
-                    <div class="form-group">
-                        <label>Concurrence :</label>
-                        <input type="number" class="form-control" id="perfConcurrency" value="5" min="1" max="50">
+                <div class="response-display">
+                    <h4>Test Results:</h4>
+                    <div id="webTestResult" class="log-area">
+                        Execute any test above to see results...
                     </div>
                 </div>
+            </div>
+
+            <div class="card">
+                <h2>🚀 Performance Testing</h2>
+                <p>Load testing with multiple concurrent requests.</p>
                 
-                <div class="form-group">
-                    <label>URL à tester :</label>
-                    <input type="text" class="form-control" id="perfUrl" value="/tests/index.html">
+                <div class="grid">
+                    <div class="grid-item">
+                        <h4>Request Count</h4>
+                        <input type="number" id="perfRequests" value="50" min="1" max="1000" style="width: 100%;">
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Concurrency</h4>
+                        <input type="number" id="perfConcurrency" value="10" min="1" max="50" style="width: 100%;">
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Target URL</h4>
+                        <input type="text" id="perfUrl" value="/tests/index.html" style="width: 100%;">
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Execute</h4>
+                        <button class="btn btn-success" onclick="testPerformance()">🚀 Start Load Test</button>
+                    </div>
                 </div>
-                
-                <button class="btn btn-primary" onclick="testPerformance()">
-                    <i class="fas fa-rocket"></i> Lancer le test
-                </button>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="perfProgress"></div>
+
+                <div class="response-display">
+                    <h4>Performance Results:</h4>
+                    <div id="performanceResult" class="log-area">
+                        Configure parameters and start the test...
+                    </div>
                 </div>
+            </div>
+
+            <div class="card">
+                <h2>📊 Server Statistics</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number" id="totalRequests">0</div>
+                        <div class="stat-label">Total Requests</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="avgResponseTime">0ms</div>
+                        <div class="stat-label">Avg Response Time</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="successRate">100%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="dataTransferred">0B</div>
+                        <div class="stat-label">Data Transferred</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Theme Management Page -->
+        <div id="themes" class="page">
+            <div class="card">
+                <h2>🎨 Theme Selection</h2>
+                <p>Choose from 8 different color themes. Your preference is automatically saved.</p>
                 
-                <div id="perfResult" class="result-panel">Configurez les paramètres et lancez le test...</div>
-            </section>
+                <div class="grid">
+                    <div class="grid-item" onclick="setTheme('light')">
+                        <h4>☀️ Light</h4>
+                        <p>Classic clean theme</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #ffffff; border-color: #ccc;"></div>
+                            <div class="color-dot" style="background: #333333;"></div>
+                            <div class="color-dot" style="background: #007bff;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item" onclick="setTheme('dark')">
+                        <h4>🌙 Dark</h4>
+                        <p>Easy on the eyes</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #1a1a1a;"></div>
+                            <div class="color-dot" style="background: #ffffff;"></div>
+                            <div class="color-dot" style="background: #4dabf7;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item" onclick="setTheme('ocean')">
+                        <h4>🌊 Ocean</h4>
+                        <p>Deep blue vibes</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #0f1419;"></div>
+                            <div class="color-dot" style="background: #e6e6e6;"></div>
+                            <div class="color-dot" style="background: #00d4aa;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item" onclick="setTheme('sunset')">
+                        <h4>🌅 Sunset</h4>
+                        <p>Purple and pink</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #2d1b69;"></div>
+                            <div class="color-dot" style="background: #f8f8f2;"></div>
+                            <div class="color-dot" style="background: #ff79c6;"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid-item" onclick="setTheme('forest')">
+                        <h4>🌲 Forest</h4>
+                        <p>Nature greens</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #1b2b1b;"></div>
+                            <div class="color-dot" style="background: #e8f5e8;"></div>
+                            <div class="color-dot" style="background: #7cb342;"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid-item" onclick="setTheme('cyberpunk')">
+                        <h4>🤖 Cyberpunk</h4>
+                        <p>Neon matrix style</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #0a0a0a;"></div>
+                            <div class="color-dot" style="background: #00ff41;"></div>
+                            <div class="color-dot" style="background: #ff073a;"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid-item" onclick="setTheme('lavender')">
+                        <h4>💜 Lavender</h4>
+                        <p>Soft purple theme</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #f5f3ff;"></div>
+                            <div class="color-dot" style="background: #4c1d95;"></div>
+                            <div class="color-dot" style="background: #8b5cf6;"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid-item" onclick="setTheme('contrast')">
+                        <h4>⚫ High Contrast</h4>
+                        <p>Accessibility focused</p>
+                        <div class="theme-preview">
+                            <div class="color-dot" style="background: #000000;"></div>
+                            <div class="color-dot" style="background: #ffffff;"></div>
+                            <div class="color-dot" style="background: #ffff00;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 2rem;">
+                    <button class="btn" onclick="showCurrentColors()">Show Current Colors</button>
+                    <button class="btn btn-warning" onclick="autoSwitchThemes()">Auto Switch</button>
+                    <button class="btn btn-danger" onclick="resetTheme()">Reset to Light</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📊 Theme Statistics</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number" id="theme-changes">0</div>
+                        <div class="stat-label">Theme Changes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="current-theme">Light</div>
+                        <div class="stat-label">Current Theme</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="session-time">0s</div>
+                        <div class="stat-label">Session Time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Management Page -->
+        <div id="sessions" class="page">
+            <div class="card">
+                <h2>📦 Session Management</h2>
+                <p>Test server-side session functionality with real-time updates.</p>
+                
+                <div class="grid">
+                    <div class="grid-item">
+                        <h4>Session Status</h4>
+                        <div id="session-status" class="status status-info">No session active</div>
+                        <div style="margin-top: 1rem;">
+                            <button class="btn" onclick="checkSessionStatus()">Check Status</button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Create Session</h4>
+                        <p>Start a new server session</p>
+                        <button class="btn btn-success" onclick="createSession()">Create Session</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Session Data</h4>
+                        <input type="text" id="session-key" placeholder="Key" style="width: 100%; margin-bottom: 0.5rem;">
+                        <input type="text" id="session-value" placeholder="Value" style="width: 100%; margin-bottom: 0.5rem;">
+                        <button class="btn" onclick="setSessionData()">Set Data</button>
+                        <button class="btn btn-warning" onclick="getSessionData()">Get Data</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Destroy Session</h4>
+                        <p>Clear current session</p>
+                        <button class="btn btn-danger" onclick="destroySession()">Destroy</button>
+                    </div>
+                </div>
+
+                <div class="response-display" id="session-response">
+                    <h4>Session Response:</h4>
+                    <pre id="session-data">Click any button above to see session data...</pre>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📋 All Sessions</h2>
+                <p>Debug view of all active sessions on the server.</p>
+                <button class="btn" onclick="listAllSessions()">List All Sessions</button>
+                <div class="response-display" id="all-sessions-display">
+                    <pre id="all-sessions-data">Click "List All Sessions" to view...</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- CGI Testing Page -->
+        <div id="cgi" class="page">
+            <div class="card">
+                <h2>⚙️ CGI Testing</h2>
+                <p>Select and execute various CGI scripts with different formats and capabilities.</p>
+                
+                <div class="grid" style="grid-template-columns: 1fr 2fr;">
+                    <div class="grid-item">
+                        <h4>🎯 CGI Script Selector</h4>
+                        <div style="margin-bottom: 1rem;">
+                            <label for="cgi-selector" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Choose a CGI script:</label>
+                            <select id="cgi-selector" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-color);">
+                                <option value="/tests/simple.cgi.py">Simple Python CGI - Basic info</option>
+                                <option value="/tests/hello.cgi.sh">Shell Script CGI - System info</option>
+                                <option value="/tests/json_info.cgi.py">JSON Python CGI - API format</option>
+                                <option value="/tests/form_processor.cgi.py">Form Processor CGI - Interactive form</option>
+                                <option value="/tests/cgi_env.py">Environment CGI - Full env vars</option>
+                                <option value="/tests/debug_cgi.py">Debug CGI - Debugging info</option>
+                                <option value="/tests/perl_demo.cgi.pl">Perl CGI - Classic Perl scripting</option>
+                                <option value="/tests/ruby_gem.cgi.rb">Ruby CGI - Elegant Ruby processing</option>
+                                <option value="/tests/c_power.cgi">C CGI - Compiled binary performance</option>
+                                <option value="/tests/node_rocket.cgi.js">Node.js CGI - JavaScript V8 engine</option>
+                                <option value="/tests/awk_power.cgi.awk">AWK CGI - Text processing patterns</option>
+                            </select>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label for="cgi-method" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">HTTP Method:</label>
+                            <select id="cgi-method" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-color);">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                            </select>
+                        </div>
+                        
+                        <div id="post-data-section" style="margin-bottom: 1rem; display: none;">
+                            <label for="cgi-post-data" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">POST Data:</label>
+                            <textarea id="cgi-post-data" placeholder="key1=value1&key2=value2" rows="3" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-color); resize: vertical;"></textarea>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label for="cgi-query" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Query Parameters:</label>
+                            <input type="text" id="cgi-query" placeholder="param1=value1&param2=value2" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-color);">
+                        </div>
+                        
+                        <button class="btn" onclick="executeCGI()" style="width: 100%; padding: 1rem; font-size: 1.1rem;">
+                            🚀 Execute CGI Script
+                        </button>
+                        
+                        <div style="margin-top: 1rem;">
+                            <span class="status status-info" id="cgi-status">Ready to execute</span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>📄 CGI Response Output</h4>
+                        <div style="margin-bottom: 1rem;">
+                            <button class="btn" onclick="clearCGIOutput()" style="margin-right: 0.5rem;">Clear</button>
+                            <button class="btn" onclick="openCGIInNewTab()" style="margin-right: 0.5rem;">Open in New Tab</button>
+                            <button class="btn" onclick="downloadCGIResponse()">Download Response</button>
+                        </div>
+                        <iframe id="cgi-iframe" class="response-iframe" src="about:blank" style="width: 100%; height: 500px; border: 2px solid var(--border-color); border-radius: 8px; background: white;"></iframe>
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 2rem;">
+                    <div class="grid-item">
+                        <h4>🔧 Quick Actions</h4>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="btn btn-success" onclick="testFormSubmission()">Test Form</button>
+                            <button class="btn btn-warning" onclick="testErrorHandling()">Test 404</button>
+                            <button class="btn btn-danger" onclick="testTimeout()">Test Timeout</button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>📋 Script Descriptions</h4>
+                        <div id="cgi-description" style="font-size: 0.9rem; color: var(--text-color); opacity: 0.8;">
+                            Select a CGI script to see its description and capabilities.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cookie Management Page -->
+        <div id="cookies" class="page">
+            <div class="card">
+                <h2>🍪 Cookie Management</h2>
+                <p>View and manage browser cookies for testing.</p>
+                
+                <div class="grid">
+                    <div class="grid-item">
+                        <h4>Current Cookies</h4>
+                        <div id="cookie-count" class="status status-info">0 cookies</div>
+                        <button class="btn" onclick="refreshCookies()">Refresh</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Set Custom Cookie</h4>
+                        <input type="text" id="cookie-name" placeholder="Cookie name" style="width: 100%; margin-bottom: 0.5rem;">
+                        <input type="text" id="cookie-value" placeholder="Cookie value" style="width: 100%; margin-bottom: 0.5rem;">
+                        <button class="btn btn-success" onclick="setCustomCookie()">Set Cookie</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Test Cookies</h4>
+                        <p>Create test cookies</p>
+                        <button class="btn" onclick="createTestCookies()">Create Test Cookies</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Clear All</h4>
+                        <p>Remove all cookies</p>
+                        <button class="btn btn-danger" onclick="clearAllCookies()">Clear All</button>
+                    </div>
+                </div>
+
+                <div class="response-display">
+                    <h4>Cookie Details:</h4>
+                    <div id="cookie-display" class="log-area">
+                        Loading cookies...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Page -->
+        <div id="debug" class="page">
+            <div class="card">
+                <h2>🔧 Debug Information</h2>
+                <p>System information and debug tools.</p>
+                
+                <div class="grid">
+                    <div class="grid-item">
+                        <h4>System Info</h4>
+                        <button class="btn" onclick="showSystemInfo()">Show Info</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Network Test</h4>
+                        <button class="btn" onclick="testNetwork()">Test Network</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Console Log</h4>
+                        <button class="btn btn-warning" onclick="exportLogs()">Export Logs</button>
+                    </div>
+                    
+                    <div class="grid-item">
+                        <h4>Reset All</h4>
+                        <button class="btn btn-danger" onclick="resetAll()">Reset Everything</button>
+                    </div>
+                </div>
+
+                <div class="response-display">
+                    <h4>Debug Output:</h4>
+                    <div id="debug-output" class="log-area">
+                        Debug information will appear here...
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📝 Activity Log</h2>
+                <div class="log-area" id="activity-log">
+                    <div class="log-entry log-info">[Init] SPA Demo initialized</div>
+                </div>
+                <div style="text-align: center; margin-top: 1rem;">
+                    <button class="btn" onclick="clearLogs()">Clear Logs</button>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
-        // Variables globales pour les statistiques
-        let stats = {
+        // Global state
+        let currentTheme = 'light';
+        let themeChanges = 0;
+        let sessionStartTime = Date.now();
+        let autoSwitchInterval = null;
+        let activityLog = [];
+
+        const themes = ['light', 'dark', 'ocean', 'sunset', 'forest', 'cyberpunk', 'lavender', 'contrast'];
+        
+        const themeIcons = {
+            light: '☀️', dark: '🌙', ocean: '🌊', sunset: '🌅', 
+            forest: '🌲', cyberpunk: '🤖', lavender: '💜', contrast: '⚫'
+        };
+
+        // Utility functions
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            activityLog.push({ message: logEntry, type });
+            
+            const logArea = document.getElementById('activity-log');
+            if (logArea) {
+                const logDiv = document.createElement('div');
+                logDiv.className = `log-entry log-${type}`;
+                logDiv.textContent = logEntry;
+                logArea.appendChild(logDiv);
+                logArea.scrollTop = logArea.scrollHeight;
+            }
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function setCookie(name, value, days = 30) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        function getAllCookies() {
+            const cookies = {};
+            if (document.cookie) {
+                document.cookie.split(';').forEach(cookie => {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name && value) {
+                        cookies[name] = value;
+                    }
+                });
+            }
+            return cookies;
+        }
+
+        // URL hash routing
+        function updateHash(pageId) {
+            window.location.hash = pageId;
+        }
+
+        function getHashPage() {
+            const hash = window.location.hash.slice(1);
+            return hash || 'webtests';
+        }
+
+        // Statistics tracking
+        const stats = {
             totalRequests: 0,
             totalResponseTime: 0,
             successCount: 0,
             dataTransferred: 0
         };
 
-        // Fonction utilitaire pour formater les octets
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
-
-        // Fonction utilitaire pour mettre à jour les statistiques
-        function updateStats(responseTime, success, dataSize = 0) {
+        function updateStats(responseTime = 0, success = true, dataSize = 0) {
             stats.totalRequests++;
             stats.totalResponseTime += responseTime;
             if (success) stats.successCount++;
             stats.dataTransferred += dataSize;
-
-            // Mise à jour de l'affichage
+            
             document.getElementById('totalRequests').textContent = stats.totalRequests;
             document.getElementById('avgResponseTime').textContent = 
-                Math.round(stats.totalResponseTime / stats.totalRequests) + 'ms';
+                stats.totalRequests > 0 ? Math.round(stats.totalResponseTime / stats.totalRequests) + 'ms' : '0ms';
             document.getElementById('successRate').textContent = 
-                Math.round((stats.successCount / stats.totalRequests) * 100) + '%';
-            document.getElementById('dataTransferred').textContent = 
-                formatBytes(stats.dataTransferred);
+                stats.totalRequests > 0 ? Math.round((stats.successCount / stats.totalRequests) * 100) + '%' : '100%';
+            document.getElementById('dataTransferred').textContent = formatBytes(stats.dataTransferred);
         }
 
-        // Fonction utilitaire pour animer la barre de progression
-        function animateProgress(elementId, duration = 1000) {
-            const progressBar = document.getElementById(elementId);
-            progressBar.style.width = '0%';
-            
-            setTimeout(() => {
-                progressBar.style.width = '100%';
-            }, 100);
-            
-            setTimeout(() => {
-                progressBar.style.width = '0%';
-            }, duration);
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + sizes[i];
         }
 
-        // Fonction utilitaire pour afficher les résultats
-        function displayResult(elementId, content, isSuccess = true, isLoading = false) {
-            const element = document.getElementById(elementId);
-            
-            if (isLoading) {
-                element.className = 'result-panel';
-                element.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
-                return;
-            }
-            
-            element.className = isSuccess ? 'result-panel result-success' : 'result-panel result-error';
-            element.textContent = content;
+        function displayWebTestResult(content, isSuccess = true) {
+            const element = document.getElementById('webTestResult');
+            element.innerHTML = `<div class="log-entry ${isSuccess ? 'log-success' : 'log-error'}">${content}</div>`;
+            element.scrollTop = element.scrollHeight;
         }
 
-        // Test GET avancé
+        function displayPerformanceResult(content) {
+            const element = document.getElementById('performanceResult');
+            element.innerHTML = `<div class="log-entry log-info">${content}</div>`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        // Web testing functions
         async function testGet() {
             const url = document.getElementById('getUrl').value;
             const showHeaders = document.getElementById('getHeaders').checked;
             const measureTime = document.getElementById('getTime').checked;
             
-            displayResult('getResult', '', true, true);
-            animateProgress('getProgress');
+            displayWebTestResult('🔄 Executing GET request...', true);
             
             const startTime = measureTime ? performance.now() : 0;
             
@@ -664,47 +1012,41 @@
                 
                 const endTime = measureTime ? performance.now() : 0;
                 const responseTime = endTime - startTime;
-                
                 const text = await response.text();
-                const dataSize = new Blob([text]).size;
+                const dataSize = text.length;
                 
                 let result = `✅ GET ${url}\n`;
                 result += `Status: ${response.status} ${response.statusText}\n`;
                 
                 if (measureTime) {
-                    result += `Temps de réponse: ${Math.round(responseTime)}ms\n`;
+                    result += `Response time: ${Math.round(responseTime)}ms\n`;
                 }
                 
-                result += `Taille: ${formatBytes(dataSize)}\n`;
-                
                 if (showHeaders) {
-                    result += '\n📋 Headers de réponse:\n';
-                    for (let [key, value] of response.headers.entries()) {
+                    result += `\n📋 Headers:\n`;
+                    for (const [key, value] of response.headers.entries()) {
                         result += `${key}: ${value}\n`;
                     }
                 }
                 
-                result += '\n📄 Contenu (premiers 500 caractères):\n';
-                result += text.substring(0, 500);
-                if (text.length > 500) result += '...';
+                result += `\n📄 Response (${dataSize} bytes):\n`;
+                result += text.length > 500 ? text.substring(0, 500) + '...' : text;
                 
-                displayResult('getResult', result, true);
+                displayWebTestResult(result, true);
                 updateStats(responseTime, response.ok, dataSize);
                 
             } catch (error) {
-                displayResult('getResult', `❌ Erreur GET: ${error.message}`, false);
+                displayWebTestResult(`❌ GET Error: ${error.message}`, false);
                 updateStats(0, false);
             }
         }
 
-        // Test POST avancé
         async function testPost() {
             const url = document.getElementById('postUrl').value;
             const content = document.getElementById('postContent').value;
             const contentType = document.getElementById('postContentType').value;
             
-            displayResult('postResult', '', true, true);
-            animateProgress('postProgress');
+            displayWebTestResult('📤 Executing POST request...', true);
             
             const startTime = performance.now();
             
@@ -720,36 +1062,34 @@
                 const endTime = performance.now();
                 const responseTime = endTime - startTime;
                 const responseText = await response.text();
-                const dataSize = new Blob([content]).size;
+                const dataSize = responseText.length;
                 
                 let result = `✅ POST ${url}\n`;
                 result += `Status: ${response.status} ${response.statusText}\n`;
-                result += `Temps de réponse: ${Math.round(responseTime)}ms\n`;
-                result += `Données envoyées: ${formatBytes(dataSize)}\n`;
-                result += `Content-Type: ${contentType}\n\n`;
-                result += `📄 Réponse du serveur:\n${responseText}`;
+                result += `Response time: ${Math.round(responseTime)}ms\n`;
+                result += `Content-Type: ${contentType}\n`;
+                result += `\n📤 Sent data (${content.length} bytes):\n${content}\n`;
+                result += `\n📄 Server response:\n${responseText}`;
                 
-                displayResult('postResult', result, response.ok);
+                displayWebTestResult(result, response.ok);
                 updateStats(responseTime, response.ok, dataSize);
                 
             } catch (error) {
-                displayResult('postResult', `❌ Erreur POST: ${error.message}`, false);
+                displayWebTestResult(`❌ POST Error: ${error.message}`, false);
                 updateStats(0, false);
             }
         }
 
-        // Test DELETE avancé
         async function testDelete() {
             const url = document.getElementById('deleteUrl').value;
             const confirm = document.getElementById('deleteConfirm').checked;
             
             if (!confirm) {
-                displayResult('deleteResult', '⚠️ Veuillez confirmer la suppression en cochant la case', false);
+                displayWebTestResult('⚠️ Please confirm deletion by checking the box', false);
                 return;
             }
             
-            displayResult('deleteResult', '', true, true);
-            animateProgress('deleteProgress');
+            displayWebTestResult('🗑️ Executing DELETE request...', true);
             
             const startTime = performance.now();
             
@@ -761,129 +1101,73 @@
                 const endTime = performance.now();
                 const responseTime = endTime - startTime;
                 const responseText = await response.text();
+                const dataSize = responseText.length;
                 
-                let result = `🗑️ DELETE ${url}\n`;
+                let result = `✅ DELETE ${url}\n`;
                 result += `Status: ${response.status} ${response.statusText}\n`;
-                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
-                result += `📄 Réponse du serveur:\n${responseText}`;
+                result += `Response time: ${Math.round(responseTime)}ms\n`;
+                result += `\n📄 Server response:\n${responseText}`;
                 
-                displayResult('deleteResult', result, response.ok);
-                updateStats(responseTime, response.ok);
+                displayWebTestResult(result, response.ok);
+                updateStats(responseTime, response.ok, dataSize);
                 
-                // Décocher la confirmation après utilisation
+                // Uncheck confirmation after use
                 document.getElementById('deleteConfirm').checked = false;
                 
             } catch (error) {
-                displayResult('deleteResult', `❌ Erreur DELETE: ${error.message}`, false);
+                displayWebTestResult(`❌ DELETE Error: ${error.message}`, false);
                 updateStats(0, false);
             }
         }
 
-        // Test d'upload avancé
         async function testUpload() {
             const fileInput = document.getElementById('uploadFile');
             const destination = document.getElementById('uploadDestination').value;
             
             if (!fileInput.files.length) {
-                displayResult('uploadResult', '⚠️ Veuillez sélectionner au moins un fichier', false);
+                displayWebTestResult('⚠️ Please select at least one file', false);
                 return;
             }
             
-            displayResult('uploadResult', '', true, true);
-            animateProgress('uploadProgress');
+            displayWebTestResult('📁 Uploading file...', true);
             
             const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
             const startTime = performance.now();
             
             try {
                 const response = await fetch(destination, {
                     method: 'POST',
-                    body: file,
-                    headers: {
-                        'Content-Type': file.type || 'application/octet-stream'
-                    }
+                    body: formData
                 });
                 
                 const endTime = performance.now();
                 const responseTime = endTime - startTime;
                 const responseText = await response.text();
                 
-                let result = `📁 UPLOAD ${destination}\n`;
-                result += `Fichier: ${file.name}\n`;
-                result += `Taille: ${formatBytes(file.size)}\n`;
-                result += `Type: ${file.type || 'application/octet-stream'}\n`;
+                let result = `✅ Upload to ${destination}\n`;
                 result += `Status: ${response.status} ${response.statusText}\n`;
-                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
-                result += `📄 Réponse du serveur:\n${responseText}`;
+                result += `Response time: ${Math.round(responseTime)}ms\n`;
+                result += `File: ${file.name} (${formatBytes(file.size)})\n`;
+                result += `\n📄 Server response:\n${responseText}`;
                 
-                displayResult('uploadResult', result, response.ok);
+                displayWebTestResult(result, response.ok);
                 updateStats(responseTime, response.ok, file.size);
                 
             } catch (error) {
-                displayResult('uploadResult', `❌ Erreur UPLOAD: ${error.message}`, false);
+                displayWebTestResult(`❌ Upload Error: ${error.message}`, false);
                 updateStats(0, false);
             }
         }
 
-        // Test CGI avancé
-        async function testCGI() {
-            const script = document.getElementById('cgiScript').value;
-            const query = document.getElementById('cgiQuery').value;
-            const postData = document.getElementById('cgiPostData').value;
-            
-            let url = script;
-            if (query) url += '?' + query;
-            
-            displayResult('cgiResult', '', true, true);
-            animateProgress('cgiProgress');
-            
-            const startTime = performance.now();
-            
-            try {
-                const options = {
-                    method: postData ? 'POST' : 'GET',
-                    headers: {}
-                };
-                
-                if (postData) {
-                    options.body = postData;
-                    options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-                }
-                
-                const response = await fetch(url, options);
-                
-                const endTime = performance.now();
-                const responseTime = endTime - startTime;
-                const responseText = await response.text();
-                
-                let result = `🐍 CGI ${script}\n`;
-                result += `Méthode: ${options.method}\n`;
-                result += `Query: ${query || 'Aucune'}\n`;
-                result += `Status: ${response.status} ${response.statusText}\n`;
-                result += `Temps de réponse: ${Math.round(responseTime)}ms\n\n`;
-                
-                if (postData) {
-                    result += `📤 Données envoyées:\n${postData}\n\n`;
-                }
-                
-                result += `📄 Réponse HTML:\n${responseText}`;
-                
-                displayResult('cgiResult', result, response.ok);
-                updateStats(responseTime, response.ok, responseText.length);
-                
-            } catch (error) {
-                displayResult('cgiResult', `❌ Erreur CGI: ${error.message}`, false);
-                updateStats(0, false);
-            }
-        }
-
-        // Test de performance avancé
         async function testPerformance() {
             const requests = parseInt(document.getElementById('perfRequests').value);
             const concurrency = parseInt(document.getElementById('perfConcurrency').value);
             const url = document.getElementById('perfUrl').value;
             
-            displayResult('perfResult', `🚀 Lancement de ${requests} requêtes avec ${concurrency} connexions simultanées...`, true, true);
+            displayPerformanceResult(`🚀 Starting ${requests} requests with ${concurrency} concurrent connections...`);
             
             const results = {
                 success: 0,
@@ -894,42 +1178,33 @@
             
             const startTime = performance.now();
             
-            // Fonction pour exécuter une requête
-            const makeRequest = async () => {
-                const reqStart = performance.now();
-                try {
-                    const response = await fetch(url);
-                    const text = await response.text();
-                    const reqEnd = performance.now();
-                    
-                    results.times.push(reqEnd - reqStart);
-                    results.totalData += text.length;
-                    
-                    if (response.ok) {
-                        results.success++;
-                    } else {
-                        results.errors++;
-                    }
-                } catch (error) {
-                    results.errors++;
-                }
-            };
-            
-            // Exécution des requêtes par batch pour respecter la concurrence
+            // Create batches for concurrency control
             const batches = [];
             for (let i = 0; i < requests; i += concurrency) {
                 const batchSize = Math.min(concurrency, requests - i);
                 const batch = [];
                 
                 for (let j = 0; j < batchSize; j++) {
-                    batch.push(makeRequest());
+                    batch.push(
+                        fetch(url)
+                            .then(async response => {
+                                const requestEndTime = performance.now();
+                                const text = await response.text();
+                                results.times.push(requestEndTime - startTime);
+                                results.totalData += text.length;
+                                if (response.ok) {
+                                    results.success++;
+                                } else {
+                                    results.errors++;
+                                }
+                            })
+                            .catch(() => {
+                                results.errors++;
+                            })
+                    );
                 }
                 
                 batches.push(Promise.all(batch));
-                
-                // Mise à jour de la progression
-                const progress = ((i + batchSize) / requests) * 100;
-                document.getElementById('perfProgress').style.width = progress + '%';
             }
             
             try {
@@ -938,79 +1213,619 @@
                 const endTime = performance.now();
                 const totalTime = endTime - startTime;
                 
-                // Calculs statistiques
+                // Calculate statistics
                 const avgTime = results.times.reduce((a, b) => a + b, 0) / results.times.length;
                 const minTime = Math.min(...results.times);
                 const maxTime = Math.max(...results.times);
                 const successRate = (results.success / requests) * 100;
-                const throughput = requests / (totalTime / 1000);
+                const requestsPerSecond = (requests / totalTime) * 1000;
                 
-                let result = `📊 RÉSULTATS DE PERFORMANCE\n`;
-                result += `═══════════════════════════\n`;
-                result += `URL testée: ${url}\n`;
-                result += `Requêtes totales: ${requests}\n`;
-                result += `Concurrence: ${concurrency}\n\n`;
-                result += `✅ Succès: ${results.success}\n`;
-                result += `❌ Erreurs: ${results.errors}\n`;
-                result += `📈 Taux de succès: ${successRate.toFixed(1)}%\n\n`;
-                result += `⏱️ Temps de réponse moyen: ${avgTime.toFixed(1)}ms\n`;
-                result += `⚡ Temps minimum: ${minTime.toFixed(1)}ms\n`;
-                result += `🐌 Temps maximum: ${maxTime.toFixed(1)}ms\n\n`;
-                result += `🚀 Débit: ${throughput.toFixed(1)} req/s\n`;
-                result += `📊 Données totales: ${formatBytes(results.totalData)}\n`;
-                result += `⏰ Temps total: ${totalTime.toFixed(1)}ms`;
+                let result = `📊 Performance Test Results\n`;
+                result += `Total time: ${Math.round(totalTime)}ms\n`;
+                result += `Requests: ${requests}\n`;
+                result += `Success: ${results.success} (${Math.round(successRate)}%)\n`;
+                result += `Errors: ${results.errors}\n`;
+                result += `Requests/second: ${Math.round(requestsPerSecond)}\n`;
+                result += `Response times:\n`;
+                result += `  Average: ${Math.round(avgTime)}ms\n`;
+                result += `  Min: ${Math.round(minTime)}ms\n`;
+                result += `  Max: ${Math.round(maxTime)}ms\n`;
+                result += `Data transferred: ${formatBytes(results.totalData)}`;
                 
-                displayResult('perfResult', result, results.errors === 0);
-                
-                // Mise à jour des statistiques globales
-                updateStats(avgTime, results.errors === 0, results.totalData);
+                displayPerformanceResult(result);
+                updateStats(avgTime, results.success > 0, results.totalData);
                 
             } catch (error) {
-                displayResult('perfResult', `❌ Erreur lors du test de performance: ${error.message}`, false);
+                displayPerformanceResult(`❌ Performance test failed: ${error.message}`);
             }
-            
-            setTimeout(() => {
-                document.getElementById('perfProgress').style.width = '0%';
-            }, 2000);
         }
 
-        // Vérification de l'état du serveur au chargement
-        async function checkServerStatus() {
+        // Page navigation
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // Remove active from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected page
+            document.getElementById(pageId).classList.add('active');
+            
+            // Mark tab as active
+            const activeTab = document.querySelector(`[href="#${pageId}"]`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+            }
+            
+            // Update URL hash
+            updateHash(pageId);
+            
+            log(`Navigated to ${pageId} page`);
+            
+            // Page-specific initialization
+            if (pageId === 'cookies') {
+                refreshCookies();
+            } else if (pageId === 'sessions') {
+                checkSessionStatus();
+            }
+        }
+
+        // Handle browser back/forward buttons
+        window.addEventListener('hashchange', () => {
+            const pageId = getHashPage();
+            showPage(pageId);
+        });
+
+        // Theme management
+        function setTheme(themeName) {
+            const body = document.body;
+            const cycleBtn = document.getElementById('theme-cycle');
+            
+            if (themeName === 'light') {
+                body.removeAttribute('data-theme');
+            } else {
+                body.setAttribute('data-theme', themeName);
+            }
+            
+            cycleBtn.textContent = themeIcons[themeName] || '🎨';
+            setCookie('theme', themeName);
+            
+            currentTheme = themeName;
+            themeChanges++;
+            
+            updateStats();
+            log(`Theme changed to ${themeName}`, 'success');
+        }
+
+        function cycleTheme() {
+            const currentIndex = themes.indexOf(currentTheme);
+            const nextIndex = (currentIndex + 1) % themes.length;
+            setTheme(themes[nextIndex]);
+        }
+
+        function randomTheme() {
+            const randomIndex = Math.floor(Math.random() * themes.length);
+            setTheme(themes[randomIndex]);
+        }
+
+        function resetTheme() {
+            setTheme('light');
+        }
+
+        function autoSwitchThemes() {
+            if (autoSwitchInterval) {
+                clearInterval(autoSwitchInterval);
+                autoSwitchInterval = null;
+                log('Auto theme switching stopped', 'info');
+            } else {
+                let currentIndex = 0;
+                autoSwitchInterval = setInterval(() => {
+                    setTheme(themes[currentIndex]);
+                    currentIndex = (currentIndex + 1) % themes.length;
+                }, 2500);
+                log('Auto theme switching started', 'info');
+            }
+        }
+
+        function showCurrentColors() {
+            const bodyStyle = getComputedStyle(document.body);
+            const rootStyle = getComputedStyle(document.documentElement);
+            
+            const colors = {
+                'Background': bodyStyle.backgroundColor,
+                'Text': bodyStyle.color,
+                'Accent': rootStyle.getPropertyValue('--accent-color').trim(),
+                'Card Background': rootStyle.getPropertyValue('--card-bg').trim(),
+                'Border': rootStyle.getPropertyValue('--border-color').trim()
+            };
+            
+            const colorModal = document.createElement('div');
+            colorModal.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: var(--card-bg); border: 2px solid var(--border-color);
+                padding: 2rem; border-radius: 12px; box-shadow: var(--shadow);
+                max-width: 500px; z-index: 10000; color: var(--text-color);
+            `;
+            
+            colorModal.innerHTML = `
+                <h3 style="color: var(--accent-color); margin-bottom: 1rem;">🎨 ${currentTheme.toUpperCase()} Theme Colors</h3>
+                <div style="display: grid; gap: 1rem;">
+                    ${Object.entries(colors).map(([name, value]) => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: var(--bg-color); border-radius: 6px;">
+                            <span>${name}:</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="width: 30px; height: 30px; background: ${value}; border: 1px solid var(--border-color); border-radius: 50%;"></div>
+                                <code style="font-size: 0.8rem;">${value}</code>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <button onclick="this.parentElement.remove()" style="
+                    margin-top: 1rem; padding: 0.5rem 1rem; background: var(--accent-color);
+                    color: white; border: none; border-radius: 6px; cursor: pointer; width: 100%;
+                ">Close</button>
+            `;
+            
+            document.body.appendChild(colorModal);
+        }
+
+        // Session management
+        async function makeSessionRequest(action, data = {}) {
             try {
-                const response = await fetch('/tests/index.html', { 
-                    method: 'HEAD',
-                    cache: 'no-cache'
+                const formData = new URLSearchParams();
+                formData.append('action', action);
+                
+                Object.entries(data).forEach(([key, value]) => {
+                    formData.append(key, value);
                 });
                 
-                const statusIndicator = document.getElementById('serverStatus');
-                const statusText = document.getElementById('serverStatusText');
+                const response = await fetch('/tests/session_manager.cgi.py', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData.toString()
+                });
                 
-                if (response.ok) {
-                    statusIndicator.className = 'status-indicator status-online';
-                    statusText.textContent = 'Serveur en ligne';
-                } else {
-                    statusIndicator.className = 'status-indicator status-offline';
-                    statusText.textContent = 'Serveur hors ligne';
-                }
+                return await response.json();
             } catch (error) {
-                const statusIndicator = document.getElementById('serverStatus');
-                const statusText = document.getElementById('serverStatusText');
-                statusIndicator.className = 'status-indicator status-offline';
-                statusText.textContent = 'Serveur inaccessible';
+                log(`Session request failed: ${error.message}`, 'error');
+                return { success: false, error: error.message };
             }
         }
 
-        // Initialisation au chargement de la page
-        document.addEventListener('DOMContentLoaded', function() {
-            checkServerStatus();
+        async function checkSessionStatus() {
+            const result = await makeSessionRequest('status');
+            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
             
-            // Vérification périodique du statut du serveur
-            setInterval(checkServerStatus, 30000); // Toutes les 30 secondes
+            const statusEl = document.getElementById('session-status');
+            if (result.session_active) {
+                statusEl.textContent = `Active: ${result.session_id}`;
+                statusEl.className = 'status status-success';
+            } else {
+                statusEl.textContent = 'No active session';
+                statusEl.className = 'status status-info';
+            }
             
-            // Mise à jour du placeholder du contenu POST avec timestamp
+            log('Session status checked', 'info');
+        }
+
+        async function createSession() {
+            const result = await makeSessionRequest('create');
+            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            
+            if (result.success) {
+                log('Session created successfully', 'success');
+                await checkSessionStatus();
+            } else {
+                log('Failed to create session', 'error');
+            }
+        }
+
+        async function setSessionData() {
+            const key = document.getElementById('session-key').value;
+            const value = document.getElementById('session-value').value;
+            
+            if (!key || !value) {
+                log('Please enter both key and value', 'warning');
+                return;
+            }
+            
+            const result = await makeSessionRequest('set', { key, value });
+            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            
+            if (result.success) {
+                log(`Session data set: ${key}=${value}`, 'success');
+            } else {
+                log('Failed to set session data', 'error');
+            }
+        }
+
+        async function getSessionData() {
+            const key = document.getElementById('session-key').value;
+            
+            if (!key) {
+                log('Please enter a key to retrieve', 'warning');
+                return;
+            }
+            
+            const result = await makeSessionRequest('get', { key });
+            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            
+            log(`Retrieved session data for key: ${key}`, 'info');
+        }
+
+        async function destroySession() {
+            const result = await makeSessionRequest('destroy');
+            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            
+            if (result.success) {
+                log('Session destroyed', 'success');
+                await checkSessionStatus();
+            } else {
+                log('Failed to destroy session', 'error');
+            }
+        }
+
+        async function listAllSessions() {
+            const result = await makeSessionRequest('list_all');
+            document.getElementById('all-sessions-data').textContent = JSON.stringify(result, null, 2);
+            
+            log('Listed all sessions', 'info');
+        }
+
+        // CGI testing - Updated interface
+        const cgiDescriptions = {
+            '/tests/simple.cgi.py': 'Basic Python CGI that displays environment variables and handles GET/POST requests. Shows server info, request details, and can process form data.',
+            '/tests/hello.cgi.sh': 'Shell script CGI that demonstrates server-side bash execution. Displays system information, current time, and environment variables.',
+            '/tests/json_info.cgi.py': 'Python CGI that returns JSON-formatted response. Useful for API testing and demonstrates structured data output.',
+            '/tests/form_processor.cgi.py': 'Interactive form processor that displays an HTML form and processes submitted data. Great for testing POST requests and form handling.',
+            '/tests/image_gen.cgi.py': 'Visual content generator that creates ASCII art and styled HTML output. Demonstrates server-side content generation.',
+            '/tests/cgi_env.py': 'Comprehensive environment display showing all CGI environment variables. Useful for debugging and understanding server configuration.',
+            '/tests/session_manager.cgi.py': 'Advanced CGI for session management and cookie handling. Demonstrates state management in web applications.',
+            '/tests/debug_cgi.py': 'Debugging-focused CGI that provides detailed request analysis and server information for troubleshooting.',
+            '/tests/perl_demo.cgi.pl': 'Classic Perl CGI script using CGI.pm module. Demonstrates traditional Perl web programming with rich formatting and system information display.',
+            '/tests/ruby_gem.cgi.rb': 'Elegant Ruby CGI script showcasing Ruby\'s syntax and capabilities. Features modern styling and comprehensive runtime information.',
+            '/tests/php_magic.cgi': 'Dynamic PHP CGI with animated gradients and comprehensive server information. Shows PHP superglobals and environment details.',
+            '/tests/c_power.cgi': 'High-performance compiled C binary CGI script. Demonstrates maximum execution speed with direct system calls and minimal memory footprint.',
+            '/tests/node_rocket.cgi.js': 'Modern Node.js CGI using V8 engine. Shows JavaScript server-side capabilities with system information and memory usage statistics.',
+            '/tests/awk_power.cgi.awk': 'AWK pattern-action programming CGI. Demonstrates text processing capabilities and pattern matching in a web context.'
+        };
+
+        // Initialize CGI interface
+        function initializeCGI() {
+            const selector = document.getElementById('cgi-selector');
+            const methodSelector = document.getElementById('cgi-method');
+            const postDataSection = document.getElementById('post-data-section');
+            const descriptionDiv = document.getElementById('cgi-description');
+            
+            // Update description when script selection changes
+            selector.addEventListener('change', function() {
+                const selectedScript = selector.value;
+                descriptionDiv.textContent = cgiDescriptions[selectedScript] || 'No description available.';
+            });
+            
+            // Show/hide POST data section based on method
+            methodSelector.addEventListener('change', function() {
+                postDataSection.style.display = methodSelector.value === 'POST' ? 'block' : 'none';
+            });
+            
+            // Set initial description
+            const initialScript = selector.value;
+            descriptionDiv.textContent = cgiDescriptions[initialScript] || 'No description available.';
+        }
+
+        async function executeCGI() {
+            const selector = document.getElementById('cgi-selector');
+            const methodSelector = document.getElementById('cgi-method');
+            const queryInput = document.getElementById('cgi-query');
+            const postDataInput = document.getElementById('cgi-post-data');
+            const statusSpan = document.getElementById('cgi-status');
+            const iframe = document.getElementById('cgi-iframe');
+            
+            const scriptPath = selector.value;
+            const method = methodSelector.value;
+            const queryParams = queryInput.value;
+            const postData = postDataInput.value;
+            
+            try {
+                statusSpan.textContent = `Executing ${method} request...`;
+                statusSpan.className = 'status status-info';
+                
+                // Build URL with query parameters
+                let url = scriptPath;
+                if (queryParams) {
+                    url += (url.includes('?') ? '&' : '?') + queryParams;
+                }
+                
+                // Prepare fetch options
+                const fetchOptions = {
+                    method: method,
+                };
+                
+                if (method === 'POST' && postData) {
+                    fetchOptions.headers = {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    };
+                    fetchOptions.body = postData;
+                }
+                
+                const response = await fetch(url, fetchOptions);
+                const responseText = await response.text();
+                
+                // Display response in iframe
+                iframe.srcdoc = responseText;
+                
+                statusSpan.textContent = `Success: ${response.status} ${response.statusText}`;
+                statusSpan.className = response.ok ? 'status status-success' : 'status status-warning';
+                
+                log(`CGI executed: ${method} ${scriptPath} - Status: ${response.status}`, response.ok ? 'success' : 'warning');
+                
+            } catch (error) {
+                iframe.srcdoc = `<html><body><h2>Error</h2><p>${error.message}</p></body></html>`;
+                statusSpan.textContent = `Error: ${error.message}`;
+                statusSpan.className = 'status status-error';
+                log(`CGI execution failed: ${error.message}`, 'error');
+            }
+        }
+
+        function clearCGIOutput() {
+            document.getElementById('cgi-iframe').srcdoc = '<html><body><h2>Output Cleared</h2><p>Ready for next execution.</p></body></html>';
+            log('CGI output cleared', 'info');
+        }
+
+        function openCGIInNewTab() {
+            const selector = document.getElementById('cgi-selector');
+            const queryInput = document.getElementById('cgi-query');
+            
+            let url = selector.value;
+            if (queryInput.value) {
+                url += (url.includes('?') ? '&' : '?') + queryInput.value;
+            }
+            
+            window.open(url, '_blank');
+            log(`Opened CGI in new tab: ${url}`, 'info');
+        }
+
+        function downloadCGIResponse() {
+            const iframe = document.getElementById('cgi-iframe');
+            const content = iframe.srcdoc || iframe.contentDocument?.documentElement.outerHTML || 'No content available';
+            
+            const blob = new Blob([content], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cgi-response.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            log('CGI response downloaded', 'success');
+        }
+
+        async function testFormSubmission() {
+            document.getElementById('cgi-selector').value = '/tests/form_processor.cgi.py';
+            document.getElementById('cgi-method').value = 'GET';
+            document.getElementById('cgi-query').value = '';
+            await executeCGI();
+            log('Form submission test prepared', 'info');
+        }
+
+        async function testErrorHandling() {
+            try {
+                document.getElementById('cgi-status').textContent = 'Testing 404 error...';
+                document.getElementById('cgi-status').className = 'status status-info';
+                
+                const response = await fetch('/tests/nonexistent_script.cgi.py');
+                const html = await response.text();
+                
+                const iframe = document.getElementById('cgi-iframe');
+                iframe.srcdoc = html;
+                
+                document.getElementById('cgi-status').textContent = `Error test: ${response.status} ${response.statusText}`;
+                document.getElementById('cgi-status').className = 'status status-success';
+                
+                log(`404 error test completed: ${response.status}`, 'success');
+            } catch (error) {
+                document.getElementById('cgi-status').textContent = `Network error: ${error.message}`;
+                document.getElementById('cgi-status').className = 'status status-success';
+                log(`404 error test completed with network error: ${error.message}`, 'success');
+            }
+        }
+
+        async function testTimeout() {
+            // This would test a CGI script that takes a long time to execute
+            document.getElementById('cgi-selector').value = '/tests/cgi_env.py';
+            document.getElementById('cgi-method').value = 'GET';
+            document.getElementById('cgi-query').value = 'slow=1&delay=5';
+            await executeCGI();
+            log('Timeout test initiated', 'warning');
+        }
+
+        // Cookie management
+        function refreshCookies() {
+            const cookies = getAllCookies();
+            const count = Object.keys(cookies).length;
+            
+            document.getElementById('cookie-count').textContent = `${count} cookies`;
+            document.getElementById('cookie-count').className = count > 0 ? 'status status-success' : 'status status-info';
+            
+            const display = document.getElementById('cookie-display');
+            if (count > 0) {
+                display.innerHTML = Object.entries(cookies).map(([name, value]) => 
+                    `<div class="log-entry"><strong>${name}:</strong> ${value}</div>`
+                ).join('');
+            } else {
+                display.innerHTML = '<div class="log-entry log-info">No cookies found</div>';
+            }
+            
+            log(`Refreshed cookies: ${count} found`, 'info');
+        }
+
+        function setCustomCookie() {
+            const name = document.getElementById('cookie-name').value;
+            const value = document.getElementById('cookie-value').value;
+            
+            if (!name || !value) {
+                log('Please enter both cookie name and value', 'warning');
+                return;
+            }
+            
+            setCookie(name, value);
+            refreshCookies();
+            log(`Set cookie: ${name}=${value}`, 'success');
+            
+            // Clear inputs
+            document.getElementById('cookie-name').value = '';
+            document.getElementById('cookie-value').value = '';
+        }
+
+        function createTestCookies() {
+            setCookie('test_cookie_1', 'test_value_1');
+            setCookie('test_cookie_2', 'test_value_2');
+            setCookie('timestamp', Date.now().toString());
+            refreshCookies();
+            log('Created test cookies', 'success');
+        }
+
+        function clearAllCookies() {
+            const cookies = getAllCookies();
+            Object.keys(cookies).forEach(name => {
+                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+            });
+            refreshCookies();
+            log('Cleared all cookies', 'success');
+        }
+
+        // Debug functions
+        function showSystemInfo() {
+            const info = {
+                'User Agent': navigator.userAgent,
+                'Platform': navigator.platform,
+                'Language': navigator.language,
+                'Screen Resolution': `${screen.width}x${screen.height}`,
+                'Viewport Size': `${window.innerWidth}x${window.innerHeight}`,
+                'Cookies Enabled': navigator.cookieEnabled,
+                'Current URL': window.location.href,
+                'Current Theme': currentTheme,
+                'Theme Changes': themeChanges,
+                'Session Time': Math.floor((Date.now() - sessionStartTime) / 1000) + 's'
+            };
+            
+            const output = document.getElementById('debug-output');
+            output.innerHTML = Object.entries(info).map(([key, value]) => 
+                `<div class="log-entry"><strong>${key}:</strong> ${value}</div>`
+            ).join('');
+            
+            log('System information displayed', 'info');
+        }
+
+        function testNetwork() {
+            const output = document.getElementById('debug-output');
+            output.innerHTML = '<div class="log-entry log-info">Testing network connectivity...</div>';
+            
+            fetch('/tests/simple.cgi.py?network_test=true')
+                .then(response => {
+                    output.innerHTML += `<div class="log-entry log-success">Network test successful: ${response.status}</div>`;
+                    log('Network test passed', 'success');
+                })
+                .catch(error => {
+                    output.innerHTML += `<div class="log-entry log-error">Network test failed: ${error.message}</div>`;
+                    log(`Network test failed: ${error.message}`, 'error');
+                });
+        }
+
+        function exportLogs() {
+            const logs = activityLog.map(entry => entry.message).join('\n');
+            const blob = new Blob([logs], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `webserv-logs-${Date.now()}.txt`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+            log('Logs exported', 'success');
+        }
+
+        function resetAll() {
+            clearAllCookies();
+            setTheme('light');
+            themeChanges = 0;
+            sessionStartTime = Date.now();
+            
+            if (autoSwitchInterval) {
+                clearInterval(autoSwitchInterval);
+                autoSwitchInterval = null;
+            }
+            
+            updateStats();
+            log('Everything reset to defaults', 'success');
+        }
+
+        function clearLogs() {
+            activityLog = [];
+            document.getElementById('activity-log').innerHTML = '<div class="log-entry log-info">[Init] Logs cleared</div>';
+            log('Activity logs cleared', 'info');
+        }
+
+        // Stats update
+        function updateStats() {
+            document.getElementById('theme-changes').textContent = themeChanges;
+            document.getElementById('current-theme').textContent = currentTheme.charAt(0).toUpperCase() + currentTheme.slice(1);
+            document.getElementById('session-time').textContent = Math.floor((Date.now() - sessionStartTime) / 1000) + 's';
+        }
+
+        // Update session time every second
+        setInterval(updateStats, 1000);
+
+        // Initialize
+        function initializeSPA() {
+            // Handle initial page from URL hash
+            const initialPage = getHashPage();
+            showPage(initialPage);
+            
+            // Load saved theme
+            const savedTheme = getCookie('theme') || 'light';
+            if (themes.includes(savedTheme)) {
+                setTheme(savedTheme);
+            }
+            
+            // Load saved stats
+            const savedChanges = getCookie('theme_changes');
+            if (savedChanges) {
+                themeChanges = parseInt(savedChanges);
+            }
+            
+            // Initialize POST content with current timestamp
             const postContent = document.getElementById('postContent');
-            postContent.value = `Ceci est un test POST avancé avec timestamp: ${new Date().toISOString()}`;
-        });
+            if (postContent) {
+                postContent.value = `Test POST with timestamp: ${new Date().toISOString()}`;
+            }
+            
+            // Initialize CGI interface
+            initializeCGI();
+            
+            // Initial updates
+            updateStats();
+            refreshCookies();
+            
+            log('🚀 Single Page Application initialized', 'success');
+        }
+
+        // Save stats periodically
+        setInterval(() => {
+            setCookie('theme_changes', themeChanges);
+        }, 5000);
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeSPA);
     </script>
 </body>
 </html>

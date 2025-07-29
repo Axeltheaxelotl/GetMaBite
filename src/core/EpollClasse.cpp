@@ -24,48 +24,11 @@
 #include <fnmatch.h>     // for fnmatch
 #include <algorithm>     // for std::count
 
-// Zero-copy I/O includes
-#include <sys/sendfile.h>
-#include <sys/mman.h>
-#include <sys/uio.h>
-
 #define BUFFER_SIZE 65536  // Augmenté à 64KB pour éviter les buffer overflow
 #define MAX_BUFFER_SIZE 10485760  // 10MB max pour les très gros fichiers
 
 // Déclaration de l'instance globale du RequestBufferManager
 RequestBufferManager _bufferManager;
-
-// Advanced buffer pool for zero-copy operations
-static const int BUFFER_POOL_SIZE = 16;
-static char bufferPool[BUFFER_POOL_SIZE][BUFFER_SIZE];
-static bool bufferPoolInUse[BUFFER_POOL_SIZE];
-static int bufferPoolIndex = 0;
-
-// Get a buffer from the pool (optimized round-robin)
-static char* getPoolBuffer(int& bufferIndex) {
-    // Start from last used index for better distribution
-    for (int i = 0; i < BUFFER_POOL_SIZE; i++) {
-        int idx = (bufferPoolIndex + i) % BUFFER_POOL_SIZE;
-        if (!bufferPoolInUse[idx]) {
-            bufferPoolInUse[idx] = true;
-            bufferPoolIndex = (idx + 1) % BUFFER_POOL_SIZE;
-            bufferIndex = idx;
-            return bufferPool[idx];
-        }
-    }
-    // All pool buffers in use, allocate new one
-    bufferIndex = -1;
-    return static_cast<char*>(malloc(BUFFER_SIZE));
-}
-
-// Return a buffer to the pool
-static void returnPoolBuffer(char* buffer, int bufferIndex) {
-    if (bufferIndex >= 0 && bufferIndex < BUFFER_POOL_SIZE) {
-        bufferPoolInUse[bufferIndex] = false;
-    } else if (buffer) {
-        free(buffer);
-    }
-}
 
 // Fonction utilitaire pour convertir size_t en string (compatible C++98)
 static std::string sizeToString(size_t value)
@@ -455,16 +418,15 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
     return smartJoinRootAndPath(server.root, requestedPath);
 }    // Gérer une requête client
 void EpollClasse::handleRequest(int client_fd) {
-    // Use optimized buffer pool to reduce malloc/free and contention
-    int bufferIndex;
-    char* buffer = getPoolBuffer(bufferIndex);
+    // Use simple malloc for reading buffer
+    char* buffer = static_cast<char*>(malloc(BUFFER_SIZE));
     
     ssize_t bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
 
     if (bytes_read < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             // No data available for now - this shouldn't happen with level-triggered
-            returnPoolBuffer(buffer, bufferIndex);
+            free(buffer);
             return;
         } else {
             Logger::logMsg(RED, CONSOLE_OUTPUT, "Error reading from FD %d: %s", client_fd, strerror(errno));
@@ -472,7 +434,7 @@ void EpollClasse::handleRequest(int client_fd) {
             timeoutManager.removeClient(client_fd);
             _bufferManager.clear(client_fd);
             close(client_fd);
-            returnPoolBuffer(buffer, bufferIndex);
+            free(buffer);
             return;
         }
     } else if (bytes_read == 0) {
@@ -482,7 +444,7 @@ void EpollClasse::handleRequest(int client_fd) {
         timeoutManager.removeClient(client_fd);
         _bufferManager.clear(client_fd);
         close(client_fd);
-        returnPoolBuffer(buffer, bufferIndex);
+        free(buffer);
         return;
     }
 
@@ -507,7 +469,7 @@ void EpollClasse::handleRequest(int client_fd) {
     
     // Check if we have a complete HTTP request
     if (!_bufferManager.isRequestComplete(client_fd)) {
-        returnPoolBuffer(buffer, bufferIndex);
+        free(buffer);
         return;
     }
 
@@ -822,7 +784,7 @@ for (std::vector<Location>::const_iterator it = server.locations.begin();
     // If it's a CGI request, the connection will be closed when CGI completes
     
     // Clean up buffer allocation
-    returnPoolBuffer(buffer, bufferIndex);
+    free(buffer);
 }
 
 // Fonction utilitaire pour envoyer une réponse (maintenant non-bloquante)
@@ -845,18 +807,11 @@ void EpollClasse::setNonBlocking(int fd) {
     int optval = 1;
     
     // Enable TCP_NODELAY to disable Nagle's algorithm for lower latency
-    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)) < 0) {
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set TCP_NODELAY for FD %d", fd);
-    }
-    
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval));
     // Set large socket buffers for high throughput
     int buffer_size = 2097152; // 2MB socket buffers
-    if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buffer_size, sizeof(buffer_size)) < 0) {
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set SO_SNDBUF for FD %d", fd);
-    }
-    if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buffer_size, sizeof(buffer_size)) < 0) {
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Failed to set SO_RCVBUF for FD %d", fd);
-    }
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buffer_size, sizeof(buffer_size));
+    setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buffer_size, sizeof(buffer_size));
 }
 
 // Génération de réponse HTTP
@@ -1160,7 +1115,8 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     if (dotPos != std::string::npos) {
         std::string extension = resolvedPath.substr(dotPos);
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
-        if (!interpreter.empty()) {
+        // Check if it's a CGI script with interpreter OR a configured CGI extension (like .cgi for executables)
+        if (!interpreter.empty() || server.cgi_extensions.find(extension) != server.cgi_extensions.end()) {
             std::map<std::string, std::string> emptyHeaders;
             handleCgiRequest(client_fd, resolvedPath, path, "GET", queryString, "", emptyHeaders, server);
             return; // CGI will handle connection closure
@@ -1207,21 +1163,9 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File exists, attempting to read: %s", resolvedPath.c_str());
     
-    // Get file size to decide between zero-copy and regular serving
-    size_t fileSize = getFileSize(resolvedPath);
-    std::string mimeType = getMimeType(resolvedPath);
-    
-    // Use zero-copy for files larger than 1KB to reduce memory usage
-    if (fileSize > 1024) {
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Using zero-copy for large file: %s (%zu bytes)", resolvedPath.c_str(), fileSize);
-        if (tryZeroCopyFileResponse(client_fd, resolvedPath, mimeType)) {
-            return; // Zero-copy initiated successfully
-        }
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Zero-copy failed, falling back to regular file serving");
-    }
-    
-    // Fallback to regular file serving (for small files or if zero-copy fails)
+    // Read and serve file content directly
     std::string content = readFile(resolvedPath);
+    std::string mimeType = getMimeType(resolvedPath);
     
     // Un fichier vide est valide, ne pas retourner d'erreur 500
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File read successfully: %s (%zu bytes)", resolvedPath.c_str(), content.length());
@@ -1259,7 +1203,8 @@ void EpollClasse::handlePostRequest(int client_fd, const std::string &path, cons
     if (dotPos != std::string::npos) {
         std::string extension = resolvedPath.substr(dotPos);
         std::string interpreter = server.getCgiInterpreterForPath(path, extension);
-        if (!interpreter.empty()) {
+        // Check if it's a CGI script with interpreter OR a configured CGI extension (like .cgi for executables)
+        if (!interpreter.empty() || server.cgi_extensions.find(extension) != server.cgi_extensions.end()) {
             handleCgiRequest(client_fd, resolvedPath, path, "POST", queryString, body, headers, server);
             return; // CGI will handle connection closure
         }
@@ -1586,14 +1531,30 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         setenv("PATH_INFO", requestPath.c_str(), 1);
 
         // Set additional standard CGI variables
-        setenv("SERVER_NAME", "localhost", 1);
-        setenv("SERVER_PORT", "8000", 1);
+        std::string serverName = server.server_names.empty() ? "localhost" : server.server_names[0];
+        std::ostringstream serverPort;
+        serverPort << (server.listen_ports.empty() ? 8000 : server.listen_ports[0]);
+        setenv("SERVER_NAME", serverName.c_str(), 1);
+        setenv("SERVER_PORT", serverPort.str().c_str(), 1);
         setenv("REMOTE_ADDR", "127.0.0.1", 1);
+        setenv("REMOTE_HOST", "localhost", 1);
+        setenv("SERVER_SOFTWARE", "webserv/1.0", 1);
+        
+        // Set DOCUMENT_ROOT if available
+        if (!server.root.empty()) {
+            setenv("DOCUMENT_ROOT", server.root.c_str(), 1);
+        }
 
         if (!body.empty()) {
             std::ostringstream contentLength;
             contentLength << body.length();
             setenv("CONTENT_LENGTH", contentLength.str().c_str(), 1);
+        }
+        
+        // Set CONTENT_TYPE if present in headers
+        std::map<std::string, std::string>::const_iterator contentTypeIt = headers.find("Content-Type");
+        if (contentTypeIt != headers.end()) {
+            setenv("CONTENT_TYPE", contentTypeIt->second.c_str(), 1);
         }
         
         // Add HTTP headers as environment variables
@@ -1614,17 +1575,47 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
             std::string extension = scriptPath.substr(dotPos);
             std::string interpreter = server.getCgiInterpreterForPath(scriptPath, extension);
             
+            // Convert relative path to absolute path for exec
+            std::string absolutePath = scriptPath;
+            if (scriptPath[0] != '/') {
+                char* cwd = getcwd(NULL, 0);
+                if (cwd) {
+                    absolutePath = std::string(cwd) + "/" + scriptPath;
+                    free(cwd);
+                }
+            }
+            
+            // Debug: print the path we're trying to execute
+            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Executing CGI: %s (original: %s)", absolutePath.c_str(), scriptPath.c_str());
+            
             if (!interpreter.empty()) {
-                execl(interpreter.c_str(), interpreter.c_str(), scriptPath.c_str(), NULL);
+                Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Using interpreter: %s", interpreter.c_str());
+                // Special handling for AWK scripts
+                if (interpreter.find("awk") != std::string::npos) {
+                    execl(interpreter.c_str(), interpreter.c_str(), "-f", absolutePath.c_str(), NULL);
+                } else {
+                    execl(interpreter.c_str(), interpreter.c_str(), absolutePath.c_str(), NULL);
+                }
             } else {
-                execl(scriptPath.c_str(), scriptPath.c_str(), NULL);
+                Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Executing directly (no interpreter)");
+                execl(absolutePath.c_str(), absolutePath.c_str(), NULL);
             }
         } else {
-            execl(scriptPath.c_str(), scriptPath.c_str(), NULL);
+            // Convert relative path to absolute path for exec
+            std::string absolutePath = scriptPath;
+            if (scriptPath[0] != '/') {
+                char* cwd = getcwd(NULL, 0);
+                if (cwd) {
+                    absolutePath = std::string(cwd) + "/" + scriptPath;
+                    free(cwd);
+                }
+            }
+            execl(absolutePath.c_str(), absolutePath.c_str(), NULL);
         }
         
         // If we get here, exec failed
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to execute CGI script");
+        perror("execl failed");
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to execute CGI script: %s", scriptPath.c_str());
         exit(1);
     } else {
         // Parent process
@@ -2020,12 +2011,6 @@ void EpollClasse::handleClientWrite(int client_fd) {
     
     ResponseBuffer* buffer = bufferIt->second;
     
-    // Check if this is a zero-copy response
-    if (buffer->use_sendfile) {
-        handleZeroCopyWrite(client_fd);
-        return;
-    }
-    
     // Regular response handling
     if (buffer->sent >= buffer->data.length()) {
         // All data sent, clean up and close connection
@@ -2115,149 +2100,6 @@ void EpollClasse::cleanupClientResponse(int client_fd) {
     std::map<int, bool>::iterator epollIt = _clientsInEpollOut.find(client_fd);
     if (epollIt != _clientsInEpollOut.end()) {
         _clientsInEpollOut.erase(epollIt);
-    }
-}
-
-// Zero-copy file response implementation
-bool EpollClasse::tryZeroCopyFileResponse(int client_fd, const std::string& filePath, const std::string& mimeType) {
-    // Open file for reading
-    int file_fd = open(filePath.c_str(), O_RDONLY);
-    if (file_fd < 0) {
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to open file for zero-copy: %s", filePath.c_str());
-        return false;
-    }
-    
-    // Get file size
-    struct stat file_stat;
-    if (fstat(file_fd, &file_stat) < 0) {
-        close(file_fd);
-        Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to stat file for zero-copy: %s", filePath.c_str());
-        return false;
-    }
-    
-    // Check if client already has a response buffer (might be from previous request)
-    std::map<int, ResponseBuffer*>::iterator it = _responseBuffers.find(client_fd);
-    if (it != _responseBuffers.end() && it->second->use_sendfile) {
-        // Clean up previous file descriptor if any
-        if (it->second->file_fd >= 0) {
-            close(it->second->file_fd);
-        }
-    }
-    
-    // Generate HTTP headers with cookies
-    std::string headers = "HTTP/1.1 200 OK\r\n";
-    headers += "Date: " + getCurrentDateTime() + "\r\n";
-    headers += "Server: Webserv/1.0\r\n";
-    headers += "Content-Type: " + mimeType + "\r\n";
-    headers += "Content-Length: " + sizeToString(file_stat.st_size) + "\r\n";
-    headers += "Connection: close\r\n";
-    
-    // Add Set-Cookie headers if any cookies are set for this client
-    if (_clientCookies.find(client_fd) != _clientCookies.end()) {
-        std::vector<std::string> cookieHeaders = _clientCookies[client_fd].generateSetCookieHeaders();
-        for (std::vector<std::string>::const_iterator it = cookieHeaders.begin();
-             it != cookieHeaders.end(); ++it) {
-            headers += "Set-Cookie: " + *it + "\r\n";
-        }
-    }
-    
-    headers += "\r\n";
-    
-    // Create or update response buffer for zero-copy
-    ResponseBuffer* buffer;
-    if (it != _responseBuffers.end()) {
-        buffer = it->second;
-    } else {
-        buffer = new ResponseBuffer();
-        _responseBuffers[client_fd] = buffer;
-    }
-    
-    buffer->data = headers;  // Only headers in memory
-    buffer->sent = 0;
-    buffer->isComplete = false;
-    buffer->use_sendfile = true;
-    buffer->file_fd = file_fd;
-    buffer->file_offset = 0;
-    buffer->file_size = file_stat.st_size;
-    
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy file response prepared: %s (%ld bytes)", 
-                   filePath.c_str(), file_stat.st_size);
-    
-    // Add client to epoll for writing
-    struct epoll_event event;
-    event.events = EPOLLOUT | EPOLLET;
-    event.data.fd = client_fd;
-    
-    std::map<int, bool>::iterator epollIt = _clientsInEpollOut.find(client_fd);
-    if (epollIt == _clientsInEpollOut.end()) {
-        if (epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, client_fd, &event) == -1) {
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Failed to add client to epoll for zero-copy write");
-            close(file_fd);
-            return false;
-        }
-        _clientsInEpollOut[client_fd] = true;
-    }
-    
-    return true;
-}
-
-void EpollClasse::handleZeroCopyWrite(int client_fd) {
-    std::map<int, ResponseBuffer*>::iterator it = _responseBuffers.find(client_fd);
-    if (it == _responseBuffers.end()) {
-        return;
-    }
-    
-    ResponseBuffer* buffer = it->second;
-    
-    // First, send HTTP headers if not already sent
-    if (buffer->sent < buffer->data.size()) {
-        ssize_t bytes_sent = send(client_fd, 
-                                 buffer->data.c_str() + buffer->sent, 
-                                 buffer->data.size() - buffer->sent, 
-                                 MSG_NOSIGNAL);
-        
-        if (bytes_sent < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return; // Try again later
-            }
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error sending headers for zero-copy: %s", strerror(errno));
-            cleanupClientResponse(client_fd);
-            return;
-        }
-        
-        buffer->sent += bytes_sent;
-        
-        // If headers not fully sent, continue next time
-        if (buffer->sent < buffer->data.size()) {
-            return;
-        }
-        
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy headers sent (%zu bytes)", buffer->data.size());
-    }
-    
-    // Headers sent, now use sendfile for the file content
-    if (buffer->use_sendfile && buffer->file_fd >= 0 && buffer->file_offset < (off_t)buffer->file_size) {
-        ssize_t bytes_sent = sendfile(client_fd, buffer->file_fd, 
-                                     &buffer->file_offset, 
-                                     buffer->file_size - buffer->file_offset);
-        
-        if (bytes_sent < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return; // Try again later
-            }
-            Logger::logMsg(RED, CONSOLE_OUTPUT, "Error in sendfile: %s", strerror(errno));
-            cleanupClientResponse(client_fd);
-            return;
-        }
-        
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy sendfile: %ld bytes (offset: %ld/%zu)", 
-                       bytes_sent, buffer->file_offset, buffer->file_size);
-        
-        // Check if file transfer is complete
-        if (buffer->file_offset >= (off_t)buffer->file_size) {
-            Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Zero-copy file transfer complete: %zu bytes", buffer->file_size);
-            cleanupClientResponse(client_fd);
-        }
     }
 }
 

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: alanty <alanty@student.42.fr>              +#+  +:+       +#+        */
+/*   By: rbiskin <rbiskin@student.42luxembourg.l    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/03/14 10:52:37 by smasse            #+#    #+#             */
-/*   Updated: 2025/07/12 15:31:19 by alanty           ###   ########.fr       */
+/*   Updated: 2025/07/29 16:21:31 by rbiskin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -306,7 +306,14 @@ void Parser::parseDirective(Server& server, Location* location)
 	else if(directive == "cgi_extension")
 	{
 		std::string extension = getNextToken();
-		std::string interpreter = getNextToken();
+		std::string interpreter = "";
+		
+		// Check if there's an interpreter specified (next token is not ; or })
+		if(hasMoreTokens() && peekNextToken() != ";" && peekNextToken() != "}")
+		{
+			interpreter = getNextToken();
+		}
+		
 		if(location)
 		{
 			location->cgi_extensions[extension] = interpreter;
