@@ -383,35 +383,51 @@ std::string EpollClasse::resolvePath(const Server &server, const std::string &re
     // Si le chemin demandé est la racine, renvoyer le fichier index
     if (requestedPath == "/")
     {
-        // Si index est déjà un chemin absolu, le retourner directement
+        // Check if there's a location that matches "/" specifically
+        const Location* location = server.findLocation(requestedPath);
+        if (location) {
+            // Use location's index if defined, otherwise fall back to server's index
+            std::string indexFile = !location->index.empty() ? location->index : server.index;
+            
+            // Handle alias vs root
+            if (!location->alias.empty()) {
+                return joinPath(location->alias, indexFile);
+            } else {
+                std::string root = !location->root.empty() ? location->root : server.root;
+                return joinPath(root, indexFile);
+            }
+        }
+        
+        // No specific location, use server defaults
         if (!server.index.empty() && server.index[0] == '/')
             return server.index;
-        // Sinon, concaténer root + index proprement
         return joinPath(server.root, server.index);
     }
 
-    // Pour tout autre chemin, vérifier si une location correspond
-    for (std::vector<Location>::const_iterator it = server.locations.begin(); 
-         it != server.locations.end(); ++it)
-    {
-        if (requestedPath.find(it->path) == 0)
-        {
-            // Si un alias est défini, l'utiliser
-            if (!it->alias.empty())
-            {
-                return joinPath(it->alias, requestedPath);
-            }
-            // Sinon utiliser le root de la location ou du serveur
-            std::string root = !it->root.empty() ? it->root : server.root;
-            // Pour les chemins se terminant par "/", on enlève le "/" avant de faire substr(1)
+    // For all other paths, use the proper findLocation method
+    const Location* location = server.findLocation(requestedPath);
+    if (location) {
+        // Si un alias est défini, l'utiliser
+        if (!location->alias.empty()) {
+            // For alias, replace the location path prefix with the alias path
             std::string pathToAdd = requestedPath;
-            if (pathToAdd.length() > it->path.length()) {
-                pathToAdd = requestedPath.substr(it->path.length());
+            if (pathToAdd.length() > location->path.length()) {
+                pathToAdd = requestedPath.substr(location->path.length());
             } else {
                 pathToAdd = "";
             }
-            return smartJoinRootAndPath(root, pathToAdd);
+            return joinPath(location->alias, pathToAdd);
         }
+        
+        // Sinon utiliser le root de la location ou du serveur
+        std::string root = !location->root.empty() ? location->root : server.root;
+        std::string pathToAdd = requestedPath;
+        if (pathToAdd.length() > location->path.length()) {
+            pathToAdd = requestedPath.substr(location->path.length());
+        } else {
+            pathToAdd = "";
+        }
+        return smartJoinRootAndPath(root, pathToAdd);
     }
 
     // Si aucune location ne correspond, utiliser le root du serveur
@@ -1088,26 +1104,10 @@ std::string EpollClasse::decodeChunkedBody(const std::string &chunkedData) {
 // Gestion des requêtes GET
 void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const Server &server, 
                                   const std::map<std::string, std::string> &headers, const std::string &queryString) {
-    // Parse cookies from request headers
+    // Parse cookies from request headers (for CGI scripts to access)
     parseCookiesFromRequest(client_fd, headers);
     
     std::string resolvedPath = resolvePath(server, path);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "GET request for path: %s -> %s", path.c_str(), resolvedPath.c_str());
-    
-    // Check session and create one if needed for demo purposes
-    std::string sessionId = getSessionIdFromCookies(client_fd);
-    if (sessionId.empty()) {
-        sessionId = SessionManager::createSession();
-        createSessionCookie(client_fd, sessionId);
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Created new session: %s", sessionId.c_str());
-    } else if (SessionManager::isValidSession(sessionId)) {
-        Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Valid session found: %s", sessionId.c_str());
-    } else {
-        // Session expired, create new one
-        sessionId = SessionManager::createSession();
-        createSessionCookie(client_fd, sessionId);
-        Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Session expired, created new: %s", sessionId.c_str());
-    }
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "GET request for path: %s -> %s", path.c_str(), resolvedPath.c_str());
     
     // Vérifier si c'est un script CGI
@@ -1132,7 +1132,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
         if (autoindexEnabled) {
             AutoIndex autoIndex;
             std::string autoIndexPage = autoIndex.generateAutoIndexPage(resolvedPath);
-            std::string response = generateHttpResponseWithCookies(client_fd, 200, "text/html", autoIndexPage);
+            std::string response = generateHttpResponse(200, "text/html", autoIndexPage);
             queueResponse(client_fd, response);
             return;
         } else {
@@ -1143,7 +1143,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
                 if (fileExists(indexPath)) {
                     std::string content = readFile(indexPath);
                     std::string mimeType = getMimeType(indexPath);
-                    std::string response = generateHttpResponseWithCookies(client_fd, 200, mimeType, content);
+                    std::string response = generateHttpResponse(200, mimeType, content);
                     queueResponse(client_fd, response);
                     return;
                 }
@@ -1170,7 +1170,7 @@ void EpollClasse::handleGetRequest(int client_fd, const std::string &path, const
     // Un fichier vide est valide, ne pas retourner d'erreur 500
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "File read successfully: %s (%zu bytes)", resolvedPath.c_str(), content.length());
     
-    std::string response = generateHttpResponseWithCookies(client_fd, 200, mimeType, content);
+    std::string response = generateHttpResponse(200, mimeType, content);
     queueResponse(client_fd, response);
 }
 
@@ -1466,6 +1466,19 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
                                  const std::map<std::string, std::string> &headers, const Server &server) {
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Handling CGI request: %s", scriptPath.c_str());
     
+    // Check if the CGI script exists and is executable
+    if (access(scriptPath.c_str(), F_OK) != 0) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI script not found: %s", scriptPath.c_str());
+        sendErrorResponse(client_fd, 500, server);
+        return;
+    }
+    
+    if (access(scriptPath.c_str(), X_OK) != 0) {
+        Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI script not executable: %s", scriptPath.c_str());
+        sendErrorResponse(client_fd, 500, server);
+        return;
+    }
+    
     // Check if we've reached the maximum number of concurrent CGI processes
     if (_cgiProcesses.size() >= MAX_CGI_PROCESSES) {
         Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Maximum CGI processes reached (%d), rejecting request", MAX_CGI_PROCESSES);
@@ -1636,6 +1649,7 @@ void EpollClasse::handleCgiRequest(int client_fd, const std::string &scriptPath,
         cgiProcess->input_body = "";
         cgiProcess->input_written = 0;
         cgiProcess->stdin_fd = -1;
+        cgiProcess->server_config = &server; // Store server config for error handling
         
         // Store the body and track writing progress for large bodies
         if (!body.empty()) {
@@ -1729,14 +1743,86 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
         int status;
         pid_t result = waitpid(process->pid, &status, WNOHANG);
         
+        // Check for immediate failure: no output and process finished
+        if (bytesRead == 0 && process->output.empty()) {
+            // CGI process produced no output - this usually indicates an error
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI process produced no output, sending 500 error");
+            
+            // Use stored server config for error response
+            if (process->server_config) {
+                const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                sendErrorResponse(client_fd, 500, *serverConfig);
+            } else {
+                // Fallback: use first available server config
+                const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                sendErrorResponse(client_fd, 500, serverConfig);
+            }
+            cleanupCgiProcess(cgi_fd);
+            return;
+        }
+        
         if (result > 0) {
             // Process completed
             process->finished = true;
             process->exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
             if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
                 Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "CGI process exited with status %d", WEXITSTATUS(status));
+                // CGI process failed - send 500 error
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI process failed with exit code %d, sending 500 error", WEXITSTATUS(status));
+                
+                // Use stored server config for error response
+                if (process->server_config) {
+                    const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                    sendErrorResponse(client_fd, 500, *serverConfig);
+                } else {
+                    // Fallback: use first available server config
+                    const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                    sendErrorResponse(client_fd, 500, serverConfig);
+                }
+                cleanupCgiProcess(cgi_fd);
+                return;
+            }
+            if (WIFSIGNALED(status)) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI process killed by signal %d, sending 500 error", WTERMSIG(status));
+                
+                // Use stored server config for error response
+                if (process->server_config) {
+                    const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                    sendErrorResponse(client_fd, 500, *serverConfig);
+                } else {
+                    // Fallback: use first available server config
+                    const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                    sendErrorResponse(client_fd, 500, serverConfig);
+                }
+                cleanupCgiProcess(cgi_fd);
+                return;
             }
         } else if (result == 0) {
+            // Process still running, check for timeout
+            time_t current_time = time(NULL);
+            time_t runtime = current_time - process->start_time;
+            
+            // CGI timeout (default 30 seconds)
+            const int CGI_TIMEOUT = 30;
+            if (runtime > CGI_TIMEOUT) {
+                Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI process timeout (%d seconds), killing and sending 500 error", CGI_TIMEOUT);
+                
+                // Kill the CGI process
+                kill(process->pid, SIGKILL);
+                
+                // Use stored server config for error response
+                if (process->server_config) {
+                    const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                    sendErrorResponse(client_fd, 500, *serverConfig);
+                } else {
+                    // Fallback: use first available server config
+                    const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                    sendErrorResponse(client_fd, 500, serverConfig);
+                }
+                cleanupCgiProcess(cgi_fd);
+                return;
+            }
+            
             // Process still running, check if we have EOF on pipe
             if (bytesRead == 0) {
                 // EOF received but process still running, continue monitoring
@@ -1749,6 +1835,23 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
         size_t headerEnd = std::string::npos;
         size_t bodyStart = 0;
         
+        // Check for malformed CGI output (no output at all, or output too short)
+        if (cgiOutput.empty() || cgiOutput.length() < 10) {
+            Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI output empty or too short (%zu bytes), sending 500 error", cgiOutput.length());
+            
+            // Use stored server config for error response
+            if (process->server_config) {
+                const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                sendErrorResponse(client_fd, 500, *serverConfig);
+            } else {
+                // Fallback: use first available server config
+                const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                sendErrorResponse(client_fd, 500, serverConfig);
+            }
+            cleanupCgiProcess(cgi_fd);
+            return;
+        }
+        
         // Look for headers separator
         headerEnd = cgiOutput.find("\r\n\r\n");
         if (headerEnd != std::string::npos) {
@@ -1758,7 +1861,28 @@ void EpollClasse::handleCgiOutput(int cgi_fd) {
             if (headerEnd != std::string::npos) {
                 bodyStart = headerEnd + 2;
             } else {
-                // No headers, treat all as body
+                // No headers, treat all as body - but check if it looks like valid content
+                if (cgiOutput.find("Content-Type:") == std::string::npos && 
+                    cgiOutput.find("content-type:") == std::string::npos &&
+                    cgiOutput.find("<!DOCTYPE") == std::string::npos &&
+                    cgiOutput.find("<html") == std::string::npos &&
+                    cgiOutput.find("<HTML") == std::string::npos) {
+                    
+                    Logger::logMsg(RED, CONSOLE_OUTPUT, "CGI output appears malformed (no Content-Type header and no HTML), sending 500 error");
+                    
+                    // Use stored server config for error response
+                    if (process->server_config) {
+                        const Server* serverConfig = static_cast<const Server*>(process->server_config);
+                        sendErrorResponse(client_fd, 500, *serverConfig);
+                    } else {
+                        // Fallback: use first available server config
+                        const Server& serverConfig = _serverConfigs->empty() ? Server() : (*_serverConfigs)[0];
+                        sendErrorResponse(client_fd, 500, serverConfig);
+                    }
+                    cleanupCgiProcess(cgi_fd);
+                    return;
+                }
+                
                 headerEnd = 0;
                 bodyStart = 0;
             }
@@ -2104,7 +2228,7 @@ void EpollClasse::cleanupClientResponse(int client_fd) {
 }
 
 // ============================================================================
-// Cookie and Session Management Implementation
+// Cookie Management Implementation
 // ============================================================================
 
 void EpollClasse::parseCookiesFromRequest(int client_fd, const std::map<std::string, std::string> &headers) {
@@ -2126,29 +2250,4 @@ void EpollClasse::addCookieToResponse(int client_fd, const Cookie& cookie) {
     _clientCookies[client_fd].addCookie(cookie);
     Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Added cookie to client %d: %s=%s", 
                    client_fd, cookie.getName().c_str(), cookie.getValue().c_str());
-}
-
-void EpollClasse::createSessionCookie(int client_fd, const std::string& sessionId) {
-    Cookie sessionCookie("SESSIONID", sessionId);
-    sessionCookie.setPath("/");
-    sessionCookie.setHttpOnly(true);
-    // Session cookie expires when browser closes (no Expires/Max-Age set)
-    addCookieToResponse(client_fd, sessionCookie);
-    Logger::logMsg(GREEN, CONSOLE_OUTPUT, "Created session cookie for client %d: %s", 
-                   client_fd, sessionId.c_str());
-}
-
-std::string EpollClasse::getSessionIdFromCookies(int client_fd) {
-    if (_clientCookies.find(client_fd) != _clientCookies.end()) {
-        const Cookie* sessionCookie = _clientCookies[client_fd].getCookie("SESSIONID");
-        if (sessionCookie && sessionCookie->isValid()) {
-            return sessionCookie->getValue();
-        }
-    }
-    return "";
-}
-
-void EpollClasse::cleanupClientCookies(int client_fd) {
-    _clientCookies.erase(client_fd);
-    Logger::logMsg(YELLOW, CONSOLE_OUTPUT, "Cleaned up cookies for client %d", client_fd);
 }

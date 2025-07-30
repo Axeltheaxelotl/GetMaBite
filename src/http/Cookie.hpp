@@ -64,6 +64,7 @@ public:
     // Cookie management
     void addCookie(const Cookie& cookie);
     void removeCookie(const std::string& name);
+    void clearCookie(const std::string& name, const std::string& path = "/"); // Creates a deletion cookie
     Cookie* getCookie(const std::string& name);
     const Cookie* getCookie(const std::string& name) const;
     bool hasCookie(const std::string& name) const;
@@ -80,30 +81,4 @@ public:
     std::vector<std::string> getCookieNames() const;
 };
 
-// Session management helper class
-class SessionManager {
-private:
-    static std::map<std::string, std::map<std::string, std::string> > _sessions;
-    static std::map<std::string, time_t> _sessionExpires;
-    static int _sessionTimeout;
-    
-    static std::string generateSessionId();
-    
-public:
-    static void setSessionTimeout(int timeoutSeconds);
-    static std::string createSession();
-    static bool isValidSession(const std::string& sessionId);
-    static void destroySession(const std::string& sessionId);
-    static void cleanupExpiredSessions();
-    
-    // Session data management
-    static void setSessionData(const std::string& sessionId, const std::string& key, const std::string& value);
-    static std::string getSessionData(const std::string& sessionId, const std::string& key);
-    static bool hasSessionData(const std::string& sessionId, const std::string& key);
-    static void removeSessionData(const std::string& sessionId, const std::string& key);
-    
-    // Statistics
-    static size_t getActiveSessionCount();
-};
-
-#endif
+#endif 

@@ -4,6 +4,7 @@ import os
 import sys
 import cgi
 import urllib.parse
+import time
 
 # Debug script to test CGI parsing
 print("Content-Type: text/plain")
@@ -32,6 +33,7 @@ print("\n=== CGI FIELDSTORAGE ===")
 try:
     # Reset stdin if possible
     form = cgi.FieldStorage()
+    time.sleep(10)  # Allow time for stdin to be read
     print(f"FieldStorage keys: {list(form.keys())}")
     for key in form.keys():
         print(f"  {key} = {form.getvalue(key)}")

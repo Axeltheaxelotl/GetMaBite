@@ -41,7 +41,7 @@ private:
     std::map<int, ResponseBuffer*> _responseBuffers;
     std::map<int, bool> _clientsInEpollOut;
     
-    // Cookie and session management
+    // Cookie management
     std::map<int, CookieManager> _clientCookies;  // client_fd -> CookieManager
     
     // Méthodes privées
@@ -101,11 +101,9 @@ private:
                          const std::map<std::string, std::string> &headers, const Server &server);
     std::map<std::string, std::string> parseMultipartData(const std::string &body, const std::string &boundary);
     
-    // Cookie and session management
+    // Cookie management
     void parseCookiesFromRequest(int client_fd, const std::map<std::string, std::string> &headers);
     void addCookieToResponse(int client_fd, const Cookie& cookie);
-    void createSessionCookie(int client_fd, const std::string& sessionId);
-    std::string getSessionIdFromCookies(int client_fd);
     void cleanupClientCookies(int client_fd);
 
 public:

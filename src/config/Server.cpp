@@ -1,5 +1,9 @@
 /* ************************************************************************** */
-/*                                                                            */
+/*                              // Keep the pattern with the highest "specificity" score
+        if (doesMatch && specificity > bestSpecificity) {
+            bestMatch       = &(*it);
+            bestSpecificity = specificity;
+        }                                                 */
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
@@ -36,15 +40,28 @@ Location* Server::findLocation(const std::string& path)
 {
 	Location* bestMatch = NULL;
 	size_t bestMatchLength = 0;
+	
 	for(std::vector<Location>::iterator it = locations.begin(); it != locations.end(); ++it)
 	{
-		if(path.find(it->path) == 0)    // Le chemin commence par le chemin de la location
-		{
-			if(it->path.length() > bestMatchLength)
-			{
-				bestMatch = &(*it);
-				bestMatchLength = it->path.length();
+		const std::string& locationPath = it->path;
+		
+		// Check if this location matches the requested path
+		bool matches = false;
+		
+		// Handle exact match or prefix match with proper boundary checking
+		if (path == locationPath) {
+			matches = true;
+		} else if (path.length() > locationPath.length() && 
+		           path.compare(0, locationPath.length(), locationPath) == 0) {
+			// Ensure we match at path boundaries
+			if (locationPath == "/" || path[locationPath.length()] == '/') {
+				matches = true;
 			}
+		}
+		
+		if (matches && locationPath.length() > bestMatchLength) {
+			bestMatch = &(*it);
+			bestMatchLength = locationPath.length();
 		}
 	}
 	return bestMatch;
@@ -72,10 +89,22 @@ const Location* Server::findLocation(const std::string& path) const
                               - std::count(pattern.begin(), pattern.end(), '?');
             }
         }
-        // Otherwise fall back to simple prefix match
-        else if (path.compare(0, pattern.length(), pattern) == 0) {
-            doesMatch = true;
-            specificity = pattern.length();
+        // Otherwise fall back to simple prefix match with proper boundary checking
+        else {
+            // Handle exact match
+            if (path == pattern) {
+                doesMatch = true;
+                specificity = pattern.length();
+            } 
+            // Handle prefix match with proper boundary checking
+            else if (path.length() > pattern.length() && 
+                     path.compare(0, pattern.length(), pattern) == 0) {
+                // Ensure we match at path boundaries
+                if (pattern == "/" || path[pattern.length()] == '/') {
+                    doesMatch = true;
+                    specificity = pattern.length();
+                }
+            }
         }
 
         // Keep the pattern with the highest “specificity” score

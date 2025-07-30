@@ -4,11 +4,6 @@
 #include <algorithm>
 #include <iomanip>
 
-// Initialize static members
-std::map<std::string, std::map<std::string, std::string> > SessionManager::_sessions;
-std::map<std::string, time_t> SessionManager::_sessionExpires;
-int SessionManager::_sessionTimeout = 3600; // 1 hour default
-
 // Cookie implementation
 Cookie::Cookie() : _name(""), _value(""), _domain(""), _path("/"), 
                    _expires(0), _httpOnly(false), _secure(false), _maxAge(-1) {}
@@ -74,7 +69,11 @@ std::string Cookie::toString() const {
 
 bool Cookie::isExpired() const {
     if (_maxAge >= 0) {
-        return false; // Max-Age is handled by browser
+        // If Max-Age is 0, the cookie should be immediately expired
+        if (_maxAge == 0) {
+            return true;
+        }
+        return false; // Max-Age > 0 is handled by browser
     }
     if (_expires > 0) {
         return time(NULL) > _expires;
@@ -124,6 +123,17 @@ void CookieManager::addCookie(const Cookie& cookie) {
 
 void CookieManager::removeCookie(const std::string& name) {
     _cookies.erase(name);
+}
+
+void CookieManager::clearCookie(const std::string& name, const std::string& path) {
+    // Create a deletion cookie with Max-Age=0 and past expiration date
+    Cookie deletionCookie(name, "");
+    deletionCookie.setPath(path);
+    deletionCookie.setMaxAge(0);
+    deletionCookie.setExpires(1); // January 1, 1970 (past date)
+    
+    // Replace existing cookie with deletion cookie
+    _cookies[name] = deletionCookie;
 }
 
 Cookie* CookieManager::getCookie(const std::string& name) {
@@ -221,102 +231,4 @@ std::vector<std::string> CookieManager::getCookieNames() const {
         names.push_back(it->first);
     }
     return names;
-}
-
-// SessionManager implementation
-void SessionManager::setSessionTimeout(int timeoutSeconds) {
-    _sessionTimeout = timeoutSeconds;
-}
-
-std::string SessionManager::generateSessionId() {
-    std::ostringstream oss;
-    srand(time(NULL));
-    
-    // Generate random session ID
-    for (int i = 0; i < 32; ++i) {
-        int r = rand() % 36;
-        if (r < 10) {
-            oss << char('0' + r);
-        } else {
-            oss << char('a' + r - 10);
-        }
-    }
-    
-    return oss.str();
-}
-
-std::string SessionManager::createSession() {
-    std::string sessionId = generateSessionId();
-    _sessions[sessionId] = std::map<std::string, std::string>();
-    _sessionExpires[sessionId] = time(NULL) + _sessionTimeout;
-    return sessionId;
-}
-
-bool SessionManager::isValidSession(const std::string& sessionId) {
-    std::map<std::string, time_t>::iterator it = _sessionExpires.find(sessionId);
-    if (it == _sessionExpires.end()) {
-        return false;
-    }
-    
-    if (time(NULL) > it->second) {
-        destroySession(sessionId);
-        return false;
-    }
-    
-    // Update expiration time
-    it->second = time(NULL) + _sessionTimeout;
-    return true;
-}
-
-void SessionManager::destroySession(const std::string& sessionId) {
-    _sessions.erase(sessionId);
-    _sessionExpires.erase(sessionId);
-}
-
-void SessionManager::cleanupExpiredSessions() {
-    time_t now = time(NULL);
-    std::map<std::string, time_t>::iterator it = _sessionExpires.begin();
-    
-    while (it != _sessionExpires.end()) {
-        if (now > it->second) {
-            _sessions.erase(it->first);
-            _sessionExpires.erase(it++);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void SessionManager::setSessionData(const std::string& sessionId, const std::string& key, const std::string& value) {
-    if (isValidSession(sessionId)) {
-        _sessions[sessionId][key] = value;
-    }
-}
-
-std::string SessionManager::getSessionData(const std::string& sessionId, const std::string& key) {
-    if (isValidSession(sessionId)) {
-        std::map<std::string, std::string>::iterator it = _sessions[sessionId].find(key);
-        if (it != _sessions[sessionId].end()) {
-            return it->second;
-        }
-    }
-    return "";
-}
-
-bool SessionManager::hasSessionData(const std::string& sessionId, const std::string& key) {
-    if (isValidSession(sessionId)) {
-        return _sessions[sessionId].find(key) != _sessions[sessionId].end();
-    }
-    return false;
-}
-
-void SessionManager::removeSessionData(const std::string& sessionId, const std::string& key) {
-    if (isValidSession(sessionId)) {
-        _sessions[sessionId].erase(key);
-    }
-}
-
-size_t SessionManager::getActiveSessionCount() {
-    cleanupExpiredSessions();
-    return _sessions.size();
 }

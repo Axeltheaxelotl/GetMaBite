@@ -45,8 +45,11 @@ struct CgiProcess {
     bool finished;
     int exit_status;
     
+    // Store server config for error handling
+    const void* server_config; // Pointer to Server object
+    
     CgiProcess() : pipe_fd(-1), pid(-1), start_time(0), cgiHandler(NULL), 
-                   input_written(0), stdin_fd(-1), finished(false), exit_status(0) {}
+                   input_written(0), stdin_fd(-1), finished(false), exit_status(0), server_config(NULL) {}
 };
 
 #endif

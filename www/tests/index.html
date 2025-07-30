@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 Webserv Test Suite - Single Page App</title>
+    
+    <!-- Immediate theme application to prevent flash -->
+    <script>
+        (function() {
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            }
+            
+            // Apply theme to html element immediately (before body exists)
+            const savedTheme = getCookie('theme');
+            if (savedTheme && savedTheme !== 'light') {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+        })();
+    </script>
+    
     <style>
         /* Theme Variables */
         :root {
@@ -293,11 +312,13 @@
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 1rem;
-            max-height: 300px;
+            max-height: 60vh;
+            min-height: 150px;
             overflow-y: auto;
             font-family: 'Courier New', monospace;
             font-size: 0.85rem;
             line-height: 1.4;
+            resize: vertical;
         }
 
         .log-entry {
@@ -317,15 +338,21 @@
             border-radius: 8px;
             padding: 1rem;
             margin-top: 1rem;
-            min-height: 200px;
+            min-height: 120px;
+            max-height: 70vh;
+            overflow-y: auto;
+            resize: vertical;
         }
 
         .response-iframe {
             width: 100%;
-            height: 300px;
+            height: 60vh;
+            max-height: 800px;
+            min-height: 300px;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             background: white;
+            resize: vertical;
         }
 
         /* Theme preview */
@@ -406,6 +433,95 @@
                 flex-direction: column;
                 gap: 1rem;
             }
+
+            /* Mobile responsive log areas */
+            .log-area {
+                max-height: 50vh;
+                min-height: 120px;
+                font-size: 0.8rem;
+            }
+
+            .response-display {
+                max-height: 60vh;
+                min-height: 100px;
+            }
+
+            .response-iframe {
+                height: 50vh;
+                min-height: 250px;
+                max-height: 600px;
+            }
+
+            /* Better text wrapping on mobile */
+            .log-area pre {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+        }
+
+        /* Improved content scaling */
+        .log-area pre, .response-display pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            margin: 0;
+        }
+
+        /* Auto-expanding content areas */
+        .auto-expand {
+            height: auto !important;
+            max-height: none !important;
+            resize: none;
+        }
+
+        /* Smooth scrolling for all scrollable areas */
+        .log-area, .response-display {
+            scroll-behavior: smooth;
+        }
+
+        /* Custom scrollbar styling */
+        .log-area::-webkit-scrollbar, .response-display::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-area::-webkit-scrollbar-track, .response-display::-webkit-scrollbar-track {
+            background: var(--card-bg);
+            border-radius: 4px;
+        }
+
+        .log-area::-webkit-scrollbar-thumb, .response-display::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .log-area::-webkit-scrollbar-thumb:hover, .response-display::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-color);
+        }
+
+        /* Scroll indicator for overflowing content */
+        .log-area.has-overflow::after {
+            content: "⬇️ Scroll";
+            position: absolute;
+            bottom: 8px;
+            right: 12px;
+            font-size: 0.7rem;
+            background: var(--accent-color);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            opacity: 0.8;
+            pointer-events: none;
+            animation: fadeInOut 2s infinite;
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.8; }
+        }
+
+        .log-area {
+            position: relative;
         }
     </style>
 </head>
@@ -514,28 +630,6 @@
                     <h4>Performance Results:</h4>
                     <div id="performanceResult" class="log-area">
                         Configure parameters and start the test...
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>📊 Server Statistics</h2>
-                <div class="stats">
-                    <div class="stat">
-                        <div class="stat-number" id="totalRequests">0</div>
-                        <div class="stat-label">Total Requests</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number" id="avgResponseTime">0ms</div>
-                        <div class="stat-label">Avg Response Time</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number" id="successRate">100%</div>
-                        <div class="stat-label">Success Rate</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number" id="dataTransferred">0B</div>
-                        <div class="stat-label">Data Transferred</div>
                     </div>
                 </div>
             </div>
@@ -657,52 +751,75 @@
 
         <!-- Session Management Page -->
         <div id="sessions" class="page">
+            <!-- Session Status Card -->
             <div class="card">
-                <h2>📦 Session Management</h2>
-                <p>Test server-side session functionality with real-time updates.</p>
+                <h2>🔍 Session Status</h2>
+                <p>View current session information and manage session lifecycle.</p>
                 
-                <div class="grid">
-                    <div class="grid-item">
-                        <h4>Session Status</h4>
-                        <div id="session-status" class="status status-info">No session active</div>
-                        <div style="margin-top: 1rem;">
-                            <button class="btn" onclick="checkSessionStatus()">Check Status</button>
-                        </div>
-                    </div>
-                    
-                    <div class="grid-item">
-                        <h4>Create Session</h4>
-                        <p>Start a new server session</p>
-                        <button class="btn btn-success" onclick="createSession()">Create Session</button>
-                    </div>
-                    
-                    <div class="grid-item">
-                        <h4>Session Data</h4>
-                        <input type="text" id="session-key" placeholder="Key" style="width: 100%; margin-bottom: 0.5rem;">
-                        <input type="text" id="session-value" placeholder="Value" style="width: 100%; margin-bottom: 0.5rem;">
-                        <button class="btn" onclick="setSessionData()">Set Data</button>
-                        <button class="btn btn-warning" onclick="getSessionData()">Get Data</button>
-                    </div>
-                    
-                    <div class="grid-item">
-                        <h4>Destroy Session</h4>
-                        <p>Clear current session</p>
-                        <button class="btn btn-danger" onclick="destroySession()">Destroy</button>
-                    </div>
+                <div id="session-status-indicator" class="status status-info" style="margin-bottom: 1rem;">
+                    No Session Active
                 </div>
+                
+                <div class="session-data" id="session-info" style="display: none; background: var(--card-bg); border: 2px solid var(--border-color); border-left: 4px solid var(--accent-color); padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="color: var(--accent-color); margin-bottom: 15px; font-size: 1.1em;">Session Information</h3>
+                    <div id="session-details"></div>
+                </div>
+                
+                <button class="btn" onclick="checkStatus()">Refresh Status</button>
+            </div>
 
-                <div class="response-display" id="session-response">
-                    <h4>Session Response:</h4>
-                    <pre id="session-data">Click any button above to see session data...</pre>
+            <!-- Session Control Card -->
+            <div class="card">
+                <h2>🎛️ Session Control</h2>
+                <p>Create and destroy sessions with proper cookie management.</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <button class="btn btn-success" onclick="createSession()">Create New Session</button>
+                    <button class="btn btn-danger" onclick="destroySession()">Destroy Session</button>
+                </div>
+                
+                <div class="response-display">
+                    <h4>Control Output:</h4>
+                    <pre id="control-output">Click a button above to manage sessions...</pre>
                 </div>
             </div>
 
+            <!-- Data Management Card -->
             <div class="card">
-                <h2>📋 All Sessions</h2>
-                <p>Debug view of all active sessions on the server.</p>
+                <h2>💾 Data Management</h2>
+                <p>Store and retrieve key-value data in your session.</p>
+                
+                <div style="margin-bottom: 15px;">
+                    <label for="data-key" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">Key:</label>
+                    <input type="text" id="data-key" placeholder="e.g., username, theme, preferences" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px;">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label for="data-value" style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">Value:</label>
+                    <input type="text" id="data-value" placeholder="e.g., john_doe, dark, saved" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px;">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <button class="btn" onclick="setData()">Set Data</button>
+                    <button class="btn btn-warning" onclick="getData()">Get Data</button>
+                    <button class="btn" onclick="getAllData()">Get All</button>
+                </div>
+                
+                <div class="response-display">
+                    <h4>Data Output:</h4>
+                    <pre id="data-output">Use the form above to store and retrieve session data...</pre>
+                </div>
+            </div>
+
+            <!-- Session Browser Card -->
+            <div class="card">
+                <h2>🗂️ Session Browser</h2>
+                <p>View all active sessions on the server (for debugging purposes).</p>
+                
                 <button class="btn" onclick="listAllSessions()">List All Sessions</button>
-                <div class="response-display" id="all-sessions-display">
-                    <pre id="all-sessions-data">Click "List All Sessions" to view...</pre>
+                
+                <div style="max-height: 250px; overflow-y: auto; margin-top: 15px;" id="session-list">
+                    Click "List All Sessions" to see active sessions...
                 </div>
             </div>
         </div>
@@ -767,7 +884,7 @@
                             <button class="btn" onclick="openCGIInNewTab()" style="margin-right: 0.5rem;">Open in New Tab</button>
                             <button class="btn" onclick="downloadCGIResponse()">Download Response</button>
                         </div>
-                        <iframe id="cgi-iframe" class="response-iframe" src="about:blank" style="width: 100%; height: 500px; border: 2px solid var(--border-color); border-radius: 8px; background: white;"></iframe>
+                        <iframe id="cgi-iframe" class="response-iframe" src="about:blank"></iframe>
                     </div>
                 </div>
 
@@ -909,6 +1026,9 @@
                 logDiv.textContent = logEntry;
                 logArea.appendChild(logDiv);
                 logArea.scrollTop = logArea.scrollHeight;
+                
+                // Check for overflow after adding content
+                setTimeout(() => checkForOverflow(logArea), 100);
             }
             
             console.log(`[${type.toUpperCase()}] ${message}`);
@@ -980,16 +1100,64 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + sizes[i];
         }
 
+        // Responsive content area functions
+        function toggleResponseBoxSize(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.classList.toggle('auto-expand');
+                
+                // Update button text if it exists
+                const toggleBtn = document.querySelector(`[onclick*="${elementId}"]`);
+                if (toggleBtn) {
+                    const isExpanded = element.classList.contains('auto-expand');
+                    toggleBtn.textContent = isExpanded ? '📏 Fixed Size' : '📐 Auto Size';
+                }
+                
+                // Check for overflow after toggle
+                setTimeout(() => checkForOverflow(element), 100);
+                
+                log(`Toggled ${elementId} size mode: ${element.classList.contains('auto-expand') ? 'auto-expand' : 'fixed'}`, 'info');
+            }
+        }
+
+        function checkForOverflow(element) {
+            if (element && element.classList.contains('log-area')) {
+                if (element.scrollHeight > element.clientHeight) {
+                    element.classList.add('has-overflow');
+                } else {
+                    element.classList.remove('has-overflow');
+                }
+            }
+        }
+
+        function addResizeToggleButton(containerId, targetId) {
+            const container = document.getElementById(containerId);
+            if (container && !container.querySelector('.resize-toggle')) {
+                const button = document.createElement('button');
+                button.className = 'btn resize-toggle';
+                button.style.marginLeft = '0.5rem';
+                button.textContent = '📐 Auto Size';
+                button.onclick = () => toggleResponseBoxSize(targetId);
+                
+                const header = container.querySelector('h4');
+                if (header) {
+                    header.appendChild(button);
+                }
+            }
+        }
+
         function displayWebTestResult(content, isSuccess = true) {
             const element = document.getElementById('webTestResult');
             element.innerHTML = `<div class="log-entry ${isSuccess ? 'log-success' : 'log-error'}">${content}</div>`;
             element.scrollTop = element.scrollHeight;
+            setTimeout(() => checkForOverflow(element), 100);
         }
 
         function displayPerformanceResult(content) {
             const element = document.getElementById('performanceResult');
             element.innerHTML = `<div class="log-entry log-info">${content}</div>`;
             element.scrollTop = element.scrollHeight;
+            setTimeout(() => checkForOverflow(element), 100);
         }
 
         // Web testing functions
@@ -1270,7 +1438,14 @@
             if (pageId === 'cookies') {
                 refreshCookies();
             } else if (pageId === 'sessions') {
-                checkSessionStatus();
+                // Show loading state
+                const statusElement = document.getElementById('session-status-indicator');
+                if (statusElement) {
+                    statusElement.textContent = 'Loading session status...';
+                    statusElement.className = 'status status-info';
+                }
+                // Check session status
+                checkStatus();
             }
         }
 
@@ -1283,12 +1458,15 @@
         // Theme management
         function setTheme(themeName) {
             const body = document.body;
+            const html = document.documentElement;
             const cycleBtn = document.getElementById('theme-cycle');
             
             if (themeName === 'light') {
                 body.removeAttribute('data-theme');
+                html.removeAttribute('data-theme');
             } else {
                 body.setAttribute('data-theme', themeName);
+                html.setAttribute('data-theme', themeName);
             }
             
             cycleBtn.textContent = themeIcons[themeName] || '🎨';
@@ -1373,109 +1551,225 @@
             document.body.appendChild(colorModal);
         }
 
-        // Session management
-        async function makeSessionRequest(action, data = {}) {
+        // Session management - Clean implementation
+        let currentSessionId = null;
+        let sessionActive = false;
+
+        function updateSessionStatus(hasSession, sessionInfo = null) {
+            const statusElement = document.getElementById('session-status-indicator');
+            const infoElement = document.getElementById('session-info');
+            const detailsElement = document.getElementById('session-details');
+
+            if (hasSession && sessionInfo) {
+                statusElement.textContent = `Active: ${sessionInfo.session_id.substring(0, 8)}...`;
+                statusElement.className = 'status status-success';
+                
+                const created = new Date(sessionInfo.created * 1000);
+                const lastAccessed = new Date(sessionInfo.last_accessed * 1000);
+                const age = Math.floor(sessionInfo.age_seconds);
+                
+                detailsElement.innerHTML = `
+                    <div style="background: var(--input-bg); color: var(--text-color); padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid var(--accent-color); border: 1px solid var(--border-color); display: flex; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span><strong>Session ID:</strong> ${sessionInfo.session_id}</span>
+                    </div>
+                    <div style="background: var(--input-bg); color: var(--text-color); padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid var(--accent-color); border: 1px solid var(--border-color); display: flex; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span><strong>Created:</strong> ${created.toLocaleString()}</span>
+                    </div>
+                    <div style="background: var(--input-bg); color: var(--text-color); padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid var(--accent-color); border: 1px solid var(--border-color); display: flex; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span><strong>Last Accessed:</strong> ${lastAccessed.toLocaleString()}</span>
+                    </div>
+                    <div style="background: var(--input-bg); color: var(--text-color); padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid var(--accent-color); border: 1px solid var(--border-color); display: flex; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span><strong>Age:</strong> ${age} seconds</span>
+                    </div>
+                    <div style="background: var(--input-bg); color: var(--text-color); padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid var(--accent-color); border: 1px solid var(--border-color); display: flex; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span><strong>Data Items:</strong> ${sessionInfo.data_count}</span>
+                    </div>
+                `;
+                infoElement.style.display = 'block';
+                
+                sessionActive = true;
+                currentSessionId = sessionInfo.session_id;
+            } else {
+                statusElement.textContent = 'No Session Active';
+                statusElement.className = 'status status-info';
+                infoElement.style.display = 'none';
+                
+                sessionActive = false;
+                currentSessionId = null;
+            }
+        }
+
+        function updateOutput(elementId, content, isJson = false) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                if (isJson) {
+                    element.textContent = JSON.stringify(content, null, 2);
+                } else {
+                    element.textContent = content;
+                }
+            }
+        }
+
+        async function makeRequest(action, params = {}) {
             try {
                 const formData = new URLSearchParams();
                 formData.append('action', action);
                 
-                Object.entries(data).forEach(([key, value]) => {
+                Object.entries(params).forEach(([key, value]) => {
                     formData.append(key, value);
                 });
-                
-                const response = await fetch('/tests/session_manager.cgi.py', {
+
+                log(`Making session request: ${action}`, 'info');
+
+                const response = await fetch('/tests/simple_session.cgi.py', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     },
+                    credentials: 'include',
                     body: formData.toString()
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
                 
-                return await response.json();
+                // Check if session was expired and cleared
+                if (result.message && result.message.includes('expired')) {
+                    log(`Session expired: ${result.message}`, 'warning');
+                    updateSessionStatus(false);
+                } else {
+                    log(`Session response: ${result.message}`, result.success ? 'success' : 'error');
+                }
+                
+                return result;
+
             } catch (error) {
                 log(`Session request failed: ${error.message}`, 'error');
                 return { success: false, error: error.message };
             }
         }
 
-        async function checkSessionStatus() {
-            const result = await makeSessionRequest('status');
-            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+        async function checkStatus() {
+            const result = await makeRequest('info');
+            updateOutput('control-output', result, true);
             
-            const statusEl = document.getElementById('session-status');
-            if (result.session_active) {
-                statusEl.textContent = `Active: ${result.session_id}`;
-                statusEl.className = 'status status-success';
+            if (result.success && result.has_session && result.session_info) {
+                updateSessionStatus(true, {
+                    session_id: result.session_id,
+                    created: result.session_info.created,
+                    last_accessed: result.session_info.last_accessed,
+                    age_seconds: result.session_info.age_seconds,
+                    data_count: result.session_info.data_count
+                });
             } else {
-                statusEl.textContent = 'No active session';
-                statusEl.className = 'status status-info';
+                updateSessionStatus(false);
             }
-            
-            log('Session status checked', 'info');
         }
 
         async function createSession() {
-            const result = await makeSessionRequest('create');
-            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            const result = await makeRequest('create');
+            updateOutput('control-output', result, true);
             
             if (result.success) {
-                log('Session created successfully', 'success');
-                await checkSessionStatus();
-            } else {
-                log('Failed to create session', 'error');
+                await checkStatus(); // Refresh status after creation
             }
         }
 
-        async function setSessionData() {
-            const key = document.getElementById('session-key').value;
-            const value = document.getElementById('session-value').value;
+        async function destroySession() {
+            const result = await makeRequest('destroy');
+            updateOutput('control-output', result, true);
+            
+            updateSessionStatus(false);
+        }
+
+        async function setData() {
+            const key = document.getElementById('data-key').value.trim();
+            const value = document.getElementById('data-value').value.trim();
             
             if (!key || !value) {
                 log('Please enter both key and value', 'warning');
                 return;
             }
             
-            const result = await makeSessionRequest('set', { key, value });
-            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            const result = await makeRequest('set', { key, value });
+            updateOutput('data-output', result, true);
             
             if (result.success) {
-                log(`Session data set: ${key}=${value}`, 'success');
-            } else {
-                log('Failed to set session data', 'error');
+                // Clear form fields
+                document.getElementById('data-key').value = '';
+                document.getElementById('data-value').value = '';
+                
+                // Refresh status to show updated data count
+                await checkStatus();
+            } else if (!result.success && result.message && result.message.includes('No active session')) {
+                log('No active session - please create a session first', 'warning');
+                updateSessionStatus(false);
             }
         }
 
-        async function getSessionData() {
-            const key = document.getElementById('session-key').value;
+        async function getData() {
+            const key = document.getElementById('data-key').value.trim();
             
             if (!key) {
                 log('Please enter a key to retrieve', 'warning');
                 return;
             }
             
-            const result = await makeSessionRequest('get', { key });
-            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+            const result = await makeRequest('get', { key });
+            updateOutput('data-output', result, true);
             
-            log(`Retrieved session data for key: ${key}`, 'info');
+            if (result.success && result.value !== undefined) {
+                // Auto-fill the value field
+                document.getElementById('data-value').value = result.value;
+            } else if (!result.success && result.message && result.message.includes('No active session')) {
+                log('No active session - please create a session first', 'warning');
+                updateSessionStatus(false);
+            }
         }
 
-        async function destroySession() {
-            const result = await makeSessionRequest('destroy');
-            document.getElementById('session-data').textContent = JSON.stringify(result, null, 2);
+        async function getAllData() {
+            const result = await makeRequest('get');
+            updateOutput('data-output', result, true);
             
-            if (result.success) {
-                log('Session destroyed', 'success');
-                await checkSessionStatus();
-            } else {
-                log('Failed to destroy session', 'error');
+            if (!result.success && result.message && result.message.includes('No active session')) {
+                log('No active session - please create a session first', 'warning');
+                updateSessionStatus(false);
             }
         }
 
         async function listAllSessions() {
-            const result = await makeSessionRequest('list_all');
-            document.getElementById('all-sessions-data').textContent = JSON.stringify(result, null, 2);
+            const result = await makeRequest('list');
             
-            log('Listed all sessions', 'info');
+            const listElement = document.getElementById('session-list');
+            
+            if (result.success && result.sessions) {
+                if (result.sessions.length === 0) {
+                    listElement.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No active sessions found</p>';
+                } else {
+                    listElement.innerHTML = result.sessions.map(session => {
+                        const created = new Date(session.created * 1000);
+                        const lastAccessed = new Date(session.last_accessed * 1000);
+                        
+                        return `
+                            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 8px;">
+                                <div style="font-weight: bold; color: #495057; margin-bottom: 5px;">
+                                    Session: ${session.id}
+                                </div>
+                                <div style="font-size: 12px; color: #6c757d;">
+                                    Created: ${created.toLocaleString()}<br>
+                                    Last Accessed: ${lastAccessed.toLocaleString()}<br>
+                                    Data Keys: ${session.data_keys.length > 0 ? session.data_keys.join(', ') : 'None'}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } else {
+                listElement.innerHTML = `<p style="color: #ff4444;">Error: ${result.message || 'Failed to load sessions'}</p>`;
+            }
         }
 
         // CGI testing - Updated interface
@@ -1787,15 +2081,15 @@
 
         // Initialize
         function initializeSPA() {
-            // Handle initial page from URL hash
-            const initialPage = getHashPage();
-            showPage(initialPage);
-            
-            // Load saved theme
+            // FIRST: Load and apply saved theme BEFORE any navigation
             const savedTheme = getCookie('theme') || 'light';
             if (themes.includes(savedTheme)) {
                 setTheme(savedTheme);
             }
+            
+            // THEN: Handle initial page from URL hash
+            const initialPage = getHashPage();
+            showPage(initialPage);
             
             // Load saved stats
             const savedChanges = getCookie('theme_changes');
@@ -1811,6 +2105,41 @@
             
             // Initialize CGI interface
             initializeCGI();
+            
+            // Add resize toggle buttons to response areas
+            setTimeout(() => {
+                // Add toggle buttons to various response areas
+                const responseAreas = [
+                    { container: 'webTestResult', target: 'webTestResult' },
+                    { container: 'performanceResult', target: 'performanceResult' },
+                    { container: 'session-data', target: 'session-data' },
+                    { container: 'all-sessions-data', target: 'all-sessions-data' },
+                    { container: 'cookie-display', target: 'cookie-display' },
+                    { container: 'debug-output', target: 'debug-output' },
+                    { container: 'activity-log', target: 'activity-log' }
+                ];
+                
+                responseAreas.forEach(area => {
+                    const element = document.getElementById(area.target);
+                    if (element && element.className.includes('log-area')) {
+                        // Add a toggle button to the parent container
+                        const parent = element.closest('.response-display') || element.closest('.card');
+                        if (parent) {
+                            const header = parent.querySelector('h4');
+                            if (header && !header.querySelector('.resize-toggle')) {
+                                const button = document.createElement('button');
+                                button.className = 'btn resize-toggle';
+                                button.style.marginLeft = '0.5rem';
+                                button.style.fontSize = '0.8rem';
+                                button.style.padding = '0.3rem 0.6rem';
+                                button.textContent = '📐 Auto Size';
+                                button.onclick = () => toggleResponseBoxSize(area.target);
+                                header.appendChild(button);
+                            }
+                        }
+                    }
+                });
+            }, 100);
             
             // Initial updates
             updateStats();
