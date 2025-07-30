@@ -920,21 +920,108 @@ std::string EpollClasse::getMimeType(const std::string &filePath) {
     
     std::string extension = filePath.substr(dotPos);
     
+    // Text types
     if (extension == ".html" || extension == ".htm") return "text/html";
     if (extension == ".css") return "text/css";
-    if (extension == ".js") return "application/javascript";
+    if (extension == ".js" || extension == ".mjs") return "application/javascript";
     if (extension == ".json") return "application/json";
+    if (extension == ".txt") return "text/plain";
+    if (extension == ".xml") return "application/xml";
+    if (extension == ".csv") return "text/csv";
+    if (extension == ".rtf") return "application/rtf";
+    if (extension == ".md") return "text/markdown";
+    if (extension == ".yaml" || extension == ".yml") return "application/x-yaml";
+    
+    // Image types
     if (extension == ".png") return "image/png";
     if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg";
     if (extension == ".gif") return "image/gif";
     if (extension == ".svg") return "image/svg+xml";
     if (extension == ".ico") return "image/x-icon";
-    if (extension == ".txt") return "text/plain";
-    if (extension == ".xml") return "application/xml";
-    if (extension == ".pdf") return "application/pdf";
-    if (extension == ".zip") return "application/zip";
+    if (extension == ".webp") return "image/webp";
+    if (extension == ".bmp") return "image/bmp";
+    if (extension == ".tiff" || extension == ".tif") return "image/tiff";
+    if (extension == ".avif") return "image/avif";
+    
+    // Video types
     if (extension == ".mp4") return "video/mp4";
+    if (extension == ".webm") return "video/webm";
+    if (extension == ".avi") return "video/x-msvideo";
+    if (extension == ".mov") return "video/quicktime";
+    if (extension == ".wmv") return "video/x-ms-wmv";
+    if (extension == ".flv") return "video/x-flv";
+    if (extension == ".mkv") return "video/x-matroska";
+    if (extension == ".m4v") return "video/x-m4v";
+    
+    // Audio types
     if (extension == ".mp3") return "audio/mpeg";
+    if (extension == ".wav") return "audio/wav";
+    if (extension == ".ogg") return "audio/ogg";
+    if (extension == ".flac") return "audio/flac";
+    if (extension == ".aac") return "audio/aac";
+    if (extension == ".m4a") return "audio/mp4";
+    if (extension == ".wma") return "audio/x-ms-wma";
+    
+    // Archive types
+    if (extension == ".zip") return "application/zip";
+    if (extension == ".rar") return "application/vnd.rar";
+    if (extension == ".tar") return "application/x-tar";
+    if (extension == ".gz") return "application/gzip";
+    if (extension == ".7z") return "application/x-7z-compressed";
+    if (extension == ".bz2") return "application/x-bzip2";
+    
+    // Document types
+    if (extension == ".pdf") return "application/pdf";
+    if (extension == ".doc") return "application/msword";
+    if (extension == ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (extension == ".xls") return "application/vnd.ms-excel";
+    if (extension == ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    if (extension == ".ppt") return "application/vnd.ms-powerpoint";
+    if (extension == ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    if (extension == ".odt") return "application/vnd.oasis.opendocument.text";
+    if (extension == ".ods") return "application/vnd.oasis.opendocument.spreadsheet";
+    if (extension == ".odp") return "application/vnd.oasis.opendocument.presentation";
+    
+    // Font types
+    if (extension == ".woff") return "font/woff";
+    if (extension == ".woff2") return "font/woff2";
+    if (extension == ".ttf") return "font/ttf";
+    if (extension == ".otf") return "font/otf";
+    if (extension == ".eot") return "application/vnd.ms-fontobject";
+    
+    // Application types
+    if (extension == ".exe") return "application/vnd.microsoft.portable-executable";
+    if (extension == ".dmg") return "application/x-apple-diskimage";
+    if (extension == ".deb") return "application/vnd.debian.binary-package";
+    if (extension == ".rpm") return "application/x-rpm";
+    if (extension == ".apk") return "application/vnd.android.package-archive";
+    if (extension == ".jar") return "application/java-archive";
+    if (extension == ".war") return "application/java-archive";
+    
+    // Programming language files
+    if (extension == ".c") return "text/x-c";
+    if (extension == ".cpp" || extension == ".cc" || extension == ".cxx") return "text/x-c++";
+    if (extension == ".h" || extension == ".hpp") return "text/x-c";
+    if (extension == ".py") return "text/x-python";
+    if (extension == ".java") return "text/x-java-source";
+    if (extension == ".php") return "application/x-httpd-php";
+    if (extension == ".rb") return "text/x-ruby";
+    if (extension == ".go") return "text/x-go";
+    if (extension == ".rs") return "text/rust";
+    if (extension == ".sh") return "application/x-sh";
+    if (extension == ".bat") return "application/x-msdos-program";
+    if (extension == ".ps1") return "application/x-powershell";
+    
+    // Configuration files
+    if (extension == ".conf") return "text/plain";
+    if (extension == ".ini") return "text/plain";
+    if (extension == ".cfg") return "text/plain";
+    if (extension == ".log") return "text/plain";
+    
+    // Web-specific
+    if (extension == ".wasm") return "application/wasm";
+    if (extension == ".map") return "application/json";
+    if (extension == ".manifest") return "text/cache-manifest";
     
     return "application/octet-stream";
 }
