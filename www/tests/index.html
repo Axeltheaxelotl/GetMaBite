@@ -565,7 +565,6 @@
                     
                     <div class="grid-item">
                         <h4>📤 POST Test</h4>
-                        <input type="text" id="postUrl" placeholder="Destination URL" value="/tests/post_result.txt" style="width: 100%; margin-bottom: 0.5rem;">
                         <textarea id="postContent" placeholder="Content to send" style="width: 100%; margin-bottom: 0.5rem; height: 60px;">Test POST with timestamp: ${new Date().toISOString()}</textarea>
                         <select id="postContentType" style="width: 100%; margin-bottom: 0.5rem;">
                             <option value="text/plain">text/plain</option>
@@ -577,7 +576,7 @@
                     
                     <div class="grid-item">
                         <h4>🗑️ DELETE Test</h4>
-                        <input type="text" id="deleteUrl" placeholder="File to delete" value="/tests/post_result.txt" style="width: 100%; margin-bottom: 0.5rem;">
+                        <input type="text" id="deleteUrl" placeholder="Filename to delete" value="post_result.txt" style="width: 100%; margin-bottom: 0.5rem;">
                         <div style="margin-bottom: 0.5rem;">
                             <label><input type="checkbox" id="deleteConfirm"> I confirm deletion</label>
                         </div>
@@ -587,7 +586,6 @@
                     <div class="grid-item">
                         <h4>📁 File Upload</h4>
                         <input type="file" id="uploadFile" style="width: 100%; margin-bottom: 0.5rem;">
-                        <input type="text" id="uploadDestination" placeholder="Upload destination" value="/tests/uploads/" style="width: 100%; margin-bottom: 0.5rem;">
                         <button class="btn btn-warning" onclick="testUpload()">Upload File</button>
                     </div>
                 </div>
@@ -1210,7 +1208,8 @@
         }
 
         async function testPost() {
-            const url = document.getElementById('postUrl').value;
+            // Fixed URL for POST uploads to /tests/upload/
+            const url = '/tests/upload/post_result.txt';
             const content = document.getElementById('postContent').value;
             const contentType = document.getElementById('postContentType').value;
             
@@ -1249,7 +1248,9 @@
         }
 
         async function testDelete() {
-            const url = document.getElementById('deleteUrl').value;
+            const userInput = document.getElementById('deleteUrl').value;
+            // Prepend /tests/upload/ to whatever the user inputs
+            const url = '/tests/upload/' + userInput.replace(/^\/+/, ''); // Remove leading slashes from user input
             const confirm = document.getElementById('deleteConfirm').checked;
             
             if (!confirm) {
@@ -1290,7 +1291,8 @@
 
         async function testUpload() {
             const fileInput = document.getElementById('uploadFile');
-            const destination = document.getElementById('uploadDestination').value;
+            // Fixed destination for uploads to /tests/upload/
+            const destination = '/tests/upload/';
             
             if (!fileInput.files.length) {
                 displayWebTestResult('⚠️ Please select at least one file', false);

@@ -94,7 +94,7 @@ EpollClasse::EpollClasse() : _serverConfigs(NULL), timeoutManager(60) // Augment
     signal(SIGCHLD, SIG_IGN); // Automatically reap child processes
     signal(SIGPIPE, SIG_IGN); // Ignore broken pipe signals
 }
-4 
+
 // Destructeur
 EpollClasse::~EpollClasse()
 {
@@ -779,7 +779,6 @@ for (std::vector<Location>::const_iterator it = server.locations.begin();
         // Méthode non supportée
         sendErrorResponse(client_fd, 501, server);
     }
-    4 
     // For CGI requests, don't close the connection here - let CGI handler manage it
     // Check if this was a CGI request by looking for the client_fd in our CGI tracking
     bool isCgiRequest = false;

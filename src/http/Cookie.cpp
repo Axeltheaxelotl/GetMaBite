@@ -105,12 +105,6 @@ std::string Cookie::formatTime(time_t time) {
     return oss.str();
 }
 
-time_t Cookie::parseTime(const std::string& timeStr) {
-    // Simple implementation - in production use strptime
-    // For now, return current time + 1 hour as fallback
-    return time(NULL) + 3600;
-}
-
 // CookieManager implementation
 CookieManager::CookieManager() {}
 CookieManager::~CookieManager() {}

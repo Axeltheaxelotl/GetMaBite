@@ -36,6 +36,7 @@ deps/
 
 # Editor files
 .vscode/
+./vscode/settings.json
 .idea/
 *.swp
 *.swo
@@ -58,3 +59,4 @@ install_manifest.txt
 /test sans epoll/*.o
 /test sans epoll/webserv2
 objs/
+.vscode/
